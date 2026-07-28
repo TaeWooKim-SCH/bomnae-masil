@@ -1,0 +1,24 @@
+# env / secrets
+.env
+.env.*
+*.pem
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# node
+node_modules/
+dist/
+.vercel/
+
+# data snapshots (드라이브 공유 — REPO_WORKFLOW 2장)
+pipeline/snapshots/
+*.dump
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
