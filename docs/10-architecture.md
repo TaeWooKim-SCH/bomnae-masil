@@ -76,6 +76,7 @@ recommended (카드로 노출됨)
 - 홈의 "이어하기" 배너 = 가장 최근 started 1건
 - **방문 전환율의 정의 = stamped ÷ (가게 미션이 있는 started)** — 대시보드 성과 숫자가 이걸 쓴다
 - status·started_at 필드는 계약 문서(30-api-contract) 동결 대상
+- **포인트 적립은 상태 전이에 정확히 걸린다**: stamped +50, recorded +30, 완주(둘 다) +20 — 원장 테이블(point_ledger: session_id, quest_id, delta, reason) 1개에 기록, 100점 도달 시 칭호 자동 해금. 재추천은 무료(포인트와 무관)
 
 ## 6. 추천이 만들어지는 과정
 
