@@ -3,28 +3,30 @@
 > 시민 활동과 골목상권을 연결하는 생활권 미션 매칭 서비스
 > 팀 마사모 · 2026 춘천시 데이터 활용 해커톤 「춘천해답」 본선 (7.31~8.1, 춘천 ICT벤처센터)
 
-## 문서 (Day 0 필독)
+## 문서 — 이 순서로 읽으세요
 
-| 문서 | 내용 |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 시스템 아키텍처 · 데이터 모델 · API · 시연 안정성 |
-| [docs/TEAM_ROLES.md](docs/TEAM_ROLES.md) | 4인 역할 분담 · 스윔레인 · 협업 규칙 |
-| [docs/REPO_WORKFLOW.md](docs/REPO_WORKFLOW.md) | 브랜치 · 이슈 · 마일스톤 운영 |
-| docs/API_CONTRACT.md | (작성 예정 — Day 0 동결 대상) |
-| docs/DEMO_SCENARIO.md | (작성 예정 — 데모 대본) |
+| 순서 | 문서 | 내용 | 대상 |
+|---|---|---|---|
+| 1 | [docs/00-overview.md](docs/00-overview.md) | 우리가 뭘 만드는가 (기획 요약) | 전원 필독 |
+| 2 | [docs/20-team.md](docs/20-team.md) | 누가 뭘 하고, 어떻게 협업하는가 | 전원 필독 |
+| 3 | [docs/10-architecture.md](docs/10-architecture.md) | 어떻게 만드는가 (시스템 설계) | 개발 착수 전 |
+| 4 | docs/30-api-contract.md | 화면↔서버 약속 (작성 예정 — Day 0 동결) | R1·R2·R4 |
+| 5 | docs/40-demo.md | 데모 대본 (작성 예정) | R4 주관 |
+
+공식 제출 기획서(PDF)는 대회 제출본이며, 내용 요약은 00-overview에 있다.
 
 ## 구조
 
 ```
-frontend/   R1 — React + Kakao Maps (시민 화면 5종 + 정책 대시보드)
+frontend/   R1 — React + 카카오맵 (화면 6종)
 backend/    R2 — FastAPI (services/scoring은 R3, quest_builder·llm은 R4 소유)
-pipeline/   R3 — 공공데이터 10종 수집·정제·적재 + 파생 테이블 배치
+pipeline/   R3 — 공공데이터 10종 수집·정리·적재
 docs/       설계 문서
 ```
 
-## 부팅 (각 디렉토리 README에 1줄씩 유지할 것 — 백업 페어 인수 조건)
+## 부팅 (각 폴더 README에 1줄씩 유지 — 백업 페어 인수 조건)
 
 - frontend: `cd frontend && npm i && npm run dev`
 - backend: `cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload`
 - pipeline: `cd pipeline && python -m load.run_all`
-- 로컬 폴백 스택: `docker compose up`
+- 오프라인 스택: `docker compose up`
