@@ -1,12 +1,6 @@
-# 디렉토리 = 소유자 (REPO_WORKFLOW.md 3장)
-# TODO: 나머지 3명의 GitHub ID로 교체할 것 (잘못된 ID는 조용히 무시되므로 반드시 실계정 확인)
+# main 머지의 최종 승인자는 R2(김태우) 한 명이다.
+# 모든 파일의 코드 오너를 단독으로 두면, 브랜치 보호의 "코드 오너 리뷰 필수"와 결합해
+# 어떤 PR도 태우의 승인 없이는 main에 못 들어간다.
+# (폴더별 실무 소유자는 docs/20-team.md 1장 참조 — 폴더 리뷰가 필요하면 PR에서 수동으로 리뷰어 지정)
 
-/backend/                               @TaeWooKim-SCH
-/docs/API_CONTRACT.md                   @TaeWooKim-SCH
-
-# /frontend/                            @<최우혁-github-id>
-# /backend/app/services/scoring/        @<최서준-github-id>
-# /backend/app/services/quest_builder/  @<우영찬-github-id>
-# /backend/app/services/llm/            @<우영찬-github-id>
-# /pipeline/                            @<최서준-github-id>
-# /docs/                                @<최서준-github-id>
+* @TaeWooKim-SCH
