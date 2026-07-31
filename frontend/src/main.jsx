@@ -33,6 +33,40 @@ function isSessionMissing(error) {
   return error?.error?.code === "SESSION_NOT_FOUND" || !localStorage.getItem("session_id");
 }
 
+// 추천 스냅샷 — 계약 §3 "뒤로가기는 재호출 없이 클라이언트가 재표시": 라우트 state 대신 여기 보관해
+// 하단 탭·새로고침으로 /recommend에 와도 마지막 추천을 다시 보여준다
+const RECO_SNAPSHOT_KEY = "last_recommendation";
+
+function saveRecoSnapshot(request, result) {
+  try { sessionStorage.setItem(RECO_SNAPSHOT_KEY, JSON.stringify({ request, result })); } catch { /* 저장 실패는 치명적이지 않다 */ }
+}
+
+function loadRecoSnapshot() {
+  try { return JSON.parse(sessionStorage.getItem(RECO_SNAPSHOT_KEY) ?? "null"); } catch { return null; }
+}
+
+// 딥링크·새 탭 직행이면 앱 내 히스토리가 없어 navigate(-1)이 죽는다 — 그때는 화면별 기본 목적지로
+function useBackTo(fallback) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return () => {
+    if (location.key !== "default") navigate(-1);
+    else navigate(fallback, { replace: true });
+  };
+}
+
+// 25-screens 0장 세션 무효 복구 — 어느 화면에서든 SESSION_NOT_FOUND면 키를 폐기하고 첫 방문 모달로
+function useSessionRecovery() {
+  const navigate = useNavigate();
+  return React.useCallback((error) => {
+    if (!isSessionMissing(error)) return false;
+    localStorage.removeItem("session_id");
+    localStorage.removeItem("active_quest_id");
+    navigate("/", { replace: true });
+    return true;
+  }, [navigate]);
+}
+
 function AppHeader({ balance, titles, health }) {
   return (
     <header className="app-header">
@@ -64,9 +98,24 @@ function QrMark() {
   </svg>;
 }
 
-function BottomNav({ active = "home" }) {
+function BottomNav({ active }) {
   const navigate = useNavigate();
-  return <nav className="bottom-nav" aria-label="주요 메뉴"><button className={active === "home" ? "active" : ""} onClick={() => navigate("/")}><NavIcon name="home" />홈</button><button className={active === "quest" ? "active" : ""} onClick={() => navigate("/recommend")}><NavIcon name="quest" />퀘스트</button><button className={active === "archive" ? "active" : ""} onClick={() => navigate("/records")}><NavIcon name="archive" />보관함</button></nav>;
+  const { pathname } = useLocation();
+  // 화면이 active를 안 넘기면 경로로 판정 — PendingScreen 등에서 "홈"이 잘못 켜지는 것 방지
+  const current = active ?? (pathname === "/" ? "home" : pathname === "/records" ? "archive" : "quest");
+  async function goQuestTab() {
+    // 이어하기 규칙(25-screens 1장): started면 상세, stamped면 기록으로 — 그 외에만 추천 목록
+    const activeId = localStorage.getItem("active_quest_id");
+    if (activeId) {
+      try {
+        const quest = await api.getQuest(activeId);
+        if (quest.status === "stamped") { navigate(`/records/${activeId}`); return; }
+        if (quest.status === "started") { navigate(`/quests/${activeId}`); return; }
+      } catch { /* 조회 실패면 추천 목록으로 */ }
+    }
+    navigate("/recommend");
+  }
+  return <nav className="bottom-nav" aria-label="주요 메뉴"><button className={current === "home" ? "active" : ""} onClick={() => navigate("/")}><NavIcon name="home" />홈</button><button className={current === "quest" ? "active" : ""} onClick={goQuestTab}><NavIcon name="quest" />퀘스트</button><button className={current === "archive" ? "active" : ""} onClick={() => navigate("/records")}><NavIcon name="archive" />보관함</button></nav>;
 }
 
 function AgeGate({ onConfirm, submitting, error }) {
@@ -144,12 +193,21 @@ function Home() {
   const [nickname, setNickname] = React.useState("");
   const [health, setHealth] = React.useState(null);
   const [activeQuest, setActiveQuest] = React.useState(null);
-  const [interests, setInterests] = React.useState([]);
-  const [zoneCode, setZoneCode] = React.useState("");
-  const [stopId, setStopId] = React.useState("");
+  // "조건 다시 고르기"·빈 결과 [조건 바꾸기]·탭 복귀 모두에서 지난 입력을 복원한다 (25-screens 2장 "입력값 유지")
+  const storedSnapshot = React.useMemo(() => loadRecoSnapshot(), []);
+  const initialRequest = React.useMemo(
+    () => location.state?.lastRequest ?? storedSnapshot?.request ?? null,
+    [], // 마운트 시 1회만
+  );
+  const [interests, setInterests] = React.useState(initialRequest?.interests ?? []);
+  const [zoneCode, setZoneCode] = React.useState(initialRequest?.origin?.zone_code ?? "");
+  const [stopId, setStopId] = React.useState(initialRequest?.origin?.stop_id ?? "");
+  const pendingStopRef = React.useRef(initialRequest?.origin?.stop_id ?? "");
   const [stopQuery, setStopQuery] = React.useState("");
-  const [time, setTime] = React.useState(INITIAL_TIME);
-  const [budget, setBudget] = React.useState(0);
+  const [time, setTime] = React.useState(initialRequest
+    ? { start: initialRequest.time_window.start.slice(11, 16), end: initialRequest.time_window.end.slice(11, 16) }
+    : INITIAL_TIME);
+  const [budget, setBudget] = React.useState(initialRequest ? initialRequest.max_budget_krw : 0);
   const [budgetSelected, setBudgetSelected] = React.useState(true);
   const [customBudgetMode, setCustomBudgetMode] = React.useState(false);
   const [customBudget, setCustomBudget] = React.useState("");
@@ -201,7 +259,9 @@ function Home() {
       return;
     }
     setStopsLoading(true);
-    setStopId("");
+    const keepStopId = pendingStopRef.current;
+    pendingStopRef.current = "";
+    setStopId(keepStopId || "");
     setStopQuery("");
     api.getStops(zoneCode)
       .then((data) => setStops([...data].sort((a, b) => a.name.localeCompare(b.name, "ko"))))
@@ -239,7 +299,9 @@ function Home() {
   const budgetIndex = Math.max(0, BUDGETS.findIndex((item) => item.value === budget));
   const quickStart = location.state?.lastRequest && location.state?.lastResult
     ? { request: location.state.lastRequest, result: location.state.lastResult }
-    : null;
+    : storedSnapshot?.request && storedSnapshot?.result
+      ? { request: storedSnapshot.request, result: storedSnapshot.result }
+      : null;
   const quickZoneName = zones.find((zone) => zone.zone_code === quickStart?.request.origin.zone_code)?.name;
   const quickBudget = BUDGETS.find((item) => item.value === quickStart?.request.max_budget_krw)?.label;
   const quickTime = quickStart?.request.time_window;
@@ -256,6 +318,7 @@ function Home() {
     };
     try {
       const result = await api.recommend(request);
+      saveRecoSnapshot(request, result);
       navigate("/recommend", { state: { request, result } });
     } catch (error) {
       if (isSessionMissing(error)) {
@@ -374,6 +437,7 @@ function Home() {
             {customBudgetMode && <p className="custom-budget-notice">추천 예산 구간은 현재 무료만·1만·3만·5만·상관없음 중에서만 선택할 수 있어요.</p>}
           </div>
 
+          {location.state?.qrNotice && <p className="form-error" role="alert">가게 QR은 퀘스트를 시작한 뒤에 찍어주세요 — 아래에서 추천을 받아 시작할 수 있어요.</p>}
           {loadError && <p className="form-error" role="alert">{loadError}</p>}
           {recommendError && <p className="form-error" role="alert">{recommendError}</p>}
           <button className="primary-button recommend-button" type="button" disabled={!isFormComplete || recommending} onClick={submitRecommendation}>
@@ -540,6 +604,8 @@ function QuestMap({ quest, expanded, onToggleExpanded }) {
 function QuestDetail() {
   const { questId } = useParams();
   const navigate = useNavigate();
+  const goBack = useBackTo("/recommend");
+  const recoverSession = useSessionRecovery();
   const [quest, setQuest] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -550,7 +616,7 @@ function QuestDetail() {
   React.useEffect(() => {
     let mounted = true;
     setLoading(true);
-    api.getQuest(questId).then((data) => { if (mounted) setQuest(data); }).catch(() => { if (mounted) setError("잠시 문제가 있었어요. 다시 시도해 주세요"); }).finally(() => { if (mounted) setLoading(false); });
+    api.getQuest(questId).then((data) => { if (mounted) setQuest(data); }).catch((requestError) => { if (mounted && !recoverSession(requestError)) setError("잠시 문제가 있었어요. 다시 시도해 주세요"); }).finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, [questId]);
 
@@ -566,8 +632,10 @@ function QuestDetail() {
       const result = await api.startQuest(quest.quest_id, { abandon_current: abandonCurrent });
       localStorage.setItem("active_quest_id", quest.quest_id);
       setQuest((current) => ({ ...current, status: result.status, started_at: result.started_at }));
-      navigate(`/verify/${quest.quest_id}`);
+      // 가게 없는 퀘스트는 인증이 없다(계약 §4 NO_MISSION) — 기록으로 바로
+      navigate(quest.mission ? `/verify/${quest.quest_id}` : `/records/${quest.quest_id}`);
     } catch (requestError) {
+      if (recoverSession(requestError)) return;
       if (requestError?.error?.code === "QUEST_IN_PROGRESS") setStartConflict(true);
       else setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요");
     } finally { setStarting(false); }
@@ -580,7 +648,7 @@ function QuestDetail() {
   const hasMission = Boolean(quest.mission);
   return <main className="app-shell detail-page">
     <QuestMap quest={quest} expanded={mapExpanded} onToggleExpanded={() => setMapExpanded((current) => !current)} />
-    <button className="detail-back" type="button" onClick={() => navigate(-1)} aria-label="추천 목록으로 돌아가기">‹</button>
+    <button className="detail-back" type="button" onClick={goBack} aria-label="추천 목록으로 돌아가기">‹</button>
     <section className="detail-content">
       <div className="detail-title-row"><div><p className="detail-type">{quest.activity.type}</p><h1>{quest.title}</h1></div><span className="point-badge">최대 {quest.max_points}P</span></div>
       <p className="detail-schedule">{quest.activity.place_name} · {quest.activity.schedule_text} · {quest.activity.price_krw === 0 ? "무료" : `입장 ${formatKrw(quest.activity.price_krw)}`}</p>
@@ -601,13 +669,13 @@ function QuestDetail() {
   </main>;
 }
 
-function VerificationResultModal({ result, onRecord, onLater }) {
+function VerificationResultModal({ result, merchantName, onRecord, onLater }) {
   const isAlready = Boolean(result.already);
   return <div className="verify-completion-backdrop" role="dialog" aria-modal="true" aria-labelledby="verify-completion-title">
     <section className="verify-completion-card">
       <div className="mission-stamp" aria-hidden="true"><small>봄내마실</small><strong>미션 완료</strong><em>{DEMO_DATE.replaceAll("-", ".")}</em></div>
       <h1 id="verify-completion-title">{isAlready ? "이미 적립된 퀘스트예요" : <>스탬프 획득! <b>+{result.points_added}P</b></>}</h1>
-      <p>{isAlready ? "이미 방문 인증이 기록되어 있어요." : "카페 소양담 (육림고개) 방문이 기록됐어요."}<br />기록까지 남기면 완주 보너스 +20P!</p>
+      <p>{isAlready ? "이미 방문 인증이 기록되어 있어요." : `${merchantName ?? "가게"} 방문이 기록됐어요.`}<br />기록까지 남기면 완주 보너스 +20P!</p>
       <button className="primary-button" type="button" onClick={onRecord}>기록 남기기</button>
       <button className="completion-later" type="button" onClick={onLater}>나중에 할게요</button>
     </section>
@@ -617,8 +685,12 @@ function VerificationResultModal({ result, onRecord, onLater }) {
 function VerifyScreen() {
   const { questId } = useParams();
   const navigate = useNavigate();
-  const [method, setMethod] = React.useState("qr");
-  const [code, setCode] = React.useState("");
+  const location = useLocation();
+  const goBack = useBackTo(`/quests/${questId}`);
+  const recoverSession = useSessionRecovery();
+  const [quest, setQuest] = React.useState(null);
+  const [method, setMethod] = React.useState(location.state?.code ? "code" : "qr");
+  const [code, setCode] = React.useState(location.state?.code ?? "");
   const [amount, setAmount] = React.useState("");
   const [receiptName, setReceiptName] = React.useState("");
   const [result, setResult] = React.useState(null);
@@ -642,6 +714,17 @@ function VerifyScreen() {
   }
   const [error, setError] = React.useState("");
   const [scanning, setScanning] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    api.getQuest(questId).then((data) => {
+      if (!mounted) return;
+      // 가게 없는 퀘스트에는 인증 화면이 없다 — 기록으로 돌려보낸다
+      if (!data.mission) { navigate(`/records/${questId}`, { replace: true }); return; }
+      setQuest(data);
+    }).catch((requestError) => { if (mounted) recoverSession(requestError); });
+    return () => { mounted = false; };
+  }, [questId]);
 
   React.useEffect(() => {
     if (!scanning) return undefined;
@@ -674,12 +757,17 @@ function VerifyScreen() {
 
   async function verifyCode(value, verificationMethod = "code", merchantId = null) {
     if (value.length !== 4) { setError("QR 코드를 다시 비춰 주세요."); return; }
-    const scenario = value === "0000" ? "already" : value !== "2097" ? "fail" : "success";
+    // 재인증은 멱등(계약 §4) — 이미 stamped면 코드와 무관하게 already 응답을 재현한다
+    const scenario = quest?.status === "stamped" ? "already" : value === "0000" ? "already" : value !== "2097" ? "fail" : "success";
     try {
       const body = verificationMethod === "qr" ? { method: "qr", merchant_id: merchantId, code: value } : { method: "code", code: value };
       const response = await api.verifyQuest(questId, body, scenario);
       setResult(response);
-    } catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
+      if (!response.already) setQuest((current) => (current ? { ...current, status: "stamped" } : current));
+    } catch (requestError) {
+      if (recoverSession(requestError)) return;
+      setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요");
+    }
   }
 
   async function verify() {
@@ -688,13 +776,19 @@ function VerifyScreen() {
     if (method === "receipt" && (!receiptName || !amount || Number(amount) < 1000 || Number(amount) > 200000)) { setError("금액을 확인해 주세요 (1,000~200,000원)"); return; }
     if (method === "code" && code.length !== 4) { setError("4자리 코드를 입력해 주세요."); return; }
     if (method === "code") { await verifyCode(code); return; }
-    try { const response = await api.verifyQuest(questId, { method: "receipt", amount_krw: Number(amount) }, "success"); setResult(response); }
-    catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
+    try {
+      const response = await api.verifyQuest(questId, { method: "receipt", amount_krw: Number(amount) }, quest?.status === "stamped" ? "already" : "success");
+      setResult(response);
+      if (!response.already) setQuest((current) => (current ? { ...current, status: "stamped" } : current));
+    } catch (requestError) {
+      if (recoverSession(requestError)) return;
+      setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요");
+    }
   }
 
   const codeTap = (key) => setCode((v) => key === "del" ? v.slice(0,-1) : v.length < 4 ? v + key : v);
   const formattedAmount = amount ? Number(amount).toLocaleString("ko-KR") : "";
-  return <main className={`app-shell verify-page${result ? " is-complete" : ""}`}><section className="verify-content"><header className="verify-head"><button onClick={() => navigate(-1)}>‹</button><h1>가게 미션 인증</h1><b>40P</b></header><div className="merchant-card"><small>미션 장소</small><strong>카페 소양담 (육림고개)</strong><p>전시 보고 나와서, 필름 감성 그대로 따뜻한 한 잔 어때요?</p></div><p className="verify-done">이미 적립된 퀘스트예요 — 기록만 남기면 완주!</p><div className="verify-tabs">{[["qr","QR 스캔"],["code","4자리 코드"],["receipt","영수증"]].map(([key,label]) => <button key={key} className={method===key?"selected":""} onClick={() => { setMethod(key); setError(""); }}>{label}</button>)}</div>{method === "qr" && <div className="verify-panel qr-panel"><div className={`qr-frame${scanning ? " scanning" : ""}`}>{scanning ? <div id="verify-qr-reader" /> : <><QrMark /><p>가게의 QR 스탠드를 비춰주세요</p></>}</div>{!scanning && <button className="scan-button" onClick={() => setScanning(true)}>QR 스캔 시작</button>}<p>카메라가 안 되면 4자리 코드 탭을 이용해 주세요</p></div>}{method === "code" && <div className="verify-panel code-panel"><p>QR 스탠드 아래 적힌 4자리 숫자를 입력해 주세요</p><div className="code-boxes">{[0,1,2,3].map(i=><i key={i}>{code[i]||""}</i>)}</div><div className="keypad">{["1","2","3","4","5","6","7","8","9","","0","del"].map(k=><button key={k} disabled={!k} onClick={()=>codeTap(k)}>{k==="del"?"⌫":k}</button>)}</div></div>}{method === "receipt" && <div className="verify-panel receipt-panel"><p>협약이 안 된 가게도 괜찮아요. 영수증 사진과 금액만 있으면 미션 완료!</p><label className="receipt-upload"><b>＋</b>영수증 사진 찍기 / 올리기<input type="file" accept="image/*" onChange={(e)=>setReceiptName(e.target.files?.[0]?.name??"")} /></label><small>사진은 저장되지 않아요 — 확인 후 바로 폐기돼요</small><input className="receipt-amount" inputMode="numeric" value={formattedAmount} onChange={(e)=>setAmount(e.target.value.replace(/\D/g,""))} placeholder="결제 금액 (1,000~200,000원)" /></div>}{error && <p className="form-error">{error}</p>}<button className="primary-button verify-submit" onClick={verify}>{method==="receipt"?"소비 인증하기":"인증하고 +40P 받기"}</button><button className="text-action record-without" onClick={() => navigate(`/records/${questId}`)}>인증 없이 기록만 남길래요</button></section><BottomNav active="quest" />{result && <VerificationResultModal result={result} onRecord={() => closeResult(() => navigate(`/records/${questId}`))} onLater={() => closeResult()} />}{reveal && <PieceRevealModal feature={reveal} features={collectionFeatures} zoneMap={collectionZoneMap} onDone={() => { setReveal(null); const nextAction = revealNextRef.current; revealNextRef.current = null; if (nextAction) nextAction(); }} />}</main>;
+  return <main className={`app-shell verify-page${result ? " is-complete" : ""}`}><section className="verify-content"><header className="verify-head"><button onClick={goBack}>‹</button><h1>가게 미션 인증</h1><b>40P</b></header><div className="merchant-card"><small>미션 장소</small><strong>{quest?.mission?.merchant_name ?? "미션 정보를 불러오는 중…"}</strong>{quest?.mission?.copy && <p>{quest.mission.copy}</p>}</div>{quest?.status === "stamped" && !result && <p className="verify-done">이미 적립된 퀘스트예요 — 기록만 남기면 완주!</p>}<div className="verify-tabs">{[["qr","QR 스캔"],["code","4자리 코드"],["receipt","영수증"]].map(([key,label]) => <button key={key} className={method===key?"selected":""} onClick={() => { setMethod(key); setError(""); }}>{label}</button>)}</div>{method === "qr" && <div className="verify-panel qr-panel"><div className={`qr-frame${scanning ? " scanning" : ""}`}>{scanning ? <div id="verify-qr-reader" /> : <><QrMark /><p>가게의 QR 스탠드를 비춰주세요</p></>}</div>{!scanning && <button className="scan-button" onClick={() => setScanning(true)}>QR 스캔 시작</button>}<p>카메라가 안 되면 4자리 코드 탭을 이용해 주세요</p></div>}{method === "code" && <div className="verify-panel code-panel"><p>QR 스탠드 아래 적힌 4자리 숫자를 입력해 주세요</p><div className="code-boxes">{[0,1,2,3].map(i=><i key={i}>{code[i]||""}</i>)}</div><div className="keypad">{["1","2","3","4","5","6","7","8","9","","0","del"].map(k=><button key={k} disabled={!k} onClick={()=>codeTap(k)}>{k==="del"?"⌫":k}</button>)}</div></div>}{method === "receipt" && <div className="verify-panel receipt-panel"><p>협약이 안 된 가게도 괜찮아요. 영수증 사진과 금액만 있으면 미션 완료!</p><label className="receipt-upload"><b>＋</b>영수증 사진 찍기 / 올리기<input type="file" accept="image/*" onChange={(e)=>setReceiptName(e.target.files?.[0]?.name??"")} /></label><small>사진은 저장되지 않아요 — 확인 후 바로 폐기돼요</small><input className="receipt-amount" inputMode="numeric" value={formattedAmount} onChange={(e)=>setAmount(e.target.value.replace(/\D/g,""))} placeholder="결제 금액 (1,000~200,000원)" /></div>}{error && <p className="form-error">{error}</p>}<button className="primary-button verify-submit" onClick={verify}>{method==="receipt"?"소비 인증하기":"인증하고 +40P 받기"}</button><button className="text-action record-without" onClick={() => navigate(`/records/${questId}`)}>인증 없이 기록만 남길래요</button></section><BottomNav active="quest" />{result && <VerificationResultModal result={result} merchantName={quest?.mission?.merchant_name} onRecord={() => closeResult(() => navigate(`/records/${questId}`))} onLater={() => closeResult()} />}{reveal && <PieceRevealModal feature={reveal} features={collectionFeatures} zoneMap={collectionZoneMap} onDone={() => { setReveal(null); const nextAction = revealNextRef.current; revealNextRef.current = null; if (nextAction) nextAction(); }} />}</main>;
 }
 
 const RECORD_QUESTIONS = [
@@ -707,7 +801,10 @@ function RecordScreen() {
   const { questId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = React.useState(questId ? "write" : "archive");
+  const recoverSession = useSessionRecovery();
+  const goBackArchive = useBackTo("/");
+  const goBackWrite = useBackTo(questId ? `/quests/${questId}` : "/");
+  const mode = questId ? "write" : "archive"; // 같은 컴포넌트가 두 라우트를 겸하므로 state가 아니라 파생값이어야 한다
   const [collectionOpen, setCollectionOpen] = React.useState(false); // 봄내 조각지도 모달 (#100)
   const [purpose, setPurpose] = React.useState("hobby");
   const [answers, setAnswers] = React.useState(["", "", ""]);
@@ -717,7 +814,7 @@ function RecordScreen() {
   const [generating, setGenerating] = React.useState(false);
   const [slowNotice, setSlowNotice] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [saveResult, setSaveResult] = React.useState(null);
+  const saveResult = location.state?.saved ?? null;
   const [quest, setQuest] = React.useState(null);
   const [records, setRecords] = React.useState([]);
   const [balance, setBalance] = React.useState(0);
@@ -735,13 +832,21 @@ function RecordScreen() {
       setRecords(data.records ?? []);
       setBalance(data.balance ?? 0);
       setTitles(data.titles ?? []);
-    } catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
-  }, []);
+    } catch (requestError) {
+      if (recoverSession(requestError)) return;
+      setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요");
+    }
+  }, [recoverSession]);
 
-  React.useEffect(() => { loadArchive(); }, [loadArchive]);
+  React.useEffect(() => {
+    loadArchive().then(() => {
+      const savedRecord = location.state?.savedRecord;
+      if (savedRecord) setRecords((current) => [savedRecord, ...current.filter((record) => record.record_id !== savedRecord.record_id)]);
+    });
+  }, [loadArchive, mode, location.state]);
   React.useEffect(() => {
     if (!questId) return;
-    api.getQuest(questId).then(setQuest).catch(() => setError("퀘스트 정보를 불러오지 못했어요."));
+    api.getQuest(questId).then(setQuest).catch((requestError) => { if (!recoverSession(requestError)) setError("퀘스트 정보를 불러오지 못했어요."); });
   }, [questId]);
 
   function chooseChip(questionIndex, chip) {
@@ -758,7 +863,11 @@ function RecordScreen() {
       setDraft(response.draft);
       setSlowNotice(Boolean(response.from_template));
       if (draft) setRegenerations((count) => count + 1);
-    } catch { setDraft(template); setSlowNotice(true); }
+    } catch (requestError) {
+      if (recoverSession(requestError)) return;
+      setDraft(template);
+      setSlowNotice(true);
+    }
     finally { setGenerating(false); }
   }
 
@@ -768,12 +877,13 @@ function RecordScreen() {
     try {
       const response = await api.saveRecord({ quest_id: questId, action: "save", purpose, answers: resolvedAnswers, final: draft });
       localStorage.removeItem("active_quest_id");
-      setSaveResult(response);
       const completedRecord = { record_id: response.record_id, title: draft.title, tags: draft.tags, created_at: `${DEMO_DATE}T14:00:00`, verified: response.verified, body: draft.body };
-      await loadArchive();
-      setRecords((current) => [completedRecord, ...current.filter((record) => record.record_id !== completedRecord.record_id)]);
-      setMode("archive");
-    } catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
+      // 저장 = 완주. 주소까지 보관함으로 옮겨 새로고침해도 작성 폼이 재노출되지 않게 한다(계약 §5 저장 후 읽기 전용)
+      navigate("/records", { replace: true, state: { saved: response, savedRecord: completedRecord } });
+    } catch (requestError) {
+      if (recoverSession(requestError)) return;
+      setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요");
+    }
     finally { setSaving(false); }
   }
 
@@ -790,14 +900,16 @@ function RecordScreen() {
 
   if (selectedRecord) return <main className="app-shell record-page"><section className="record-content readonly-record"><header className="record-head"><button onClick={() => setSelectedRecord(null)}>‹</button><h1>나의 기록</h1><strong>{balance.toLocaleString()}P</strong></header><p className="record-date">{selectedRecord.created_at.slice(0, 10).replaceAll("-", ".")}</p><h2>{selectedRecord.title}</h2><div className="record-tags">{selectedRecord.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>{!selectedRecord.verified && <span className="unverified-badge">인증 없음</span>}<article>{selectedRecord.body ?? "이 기록의 본문은 생성 당시 읽기 전용으로 보관됩니다."}</article></section><BottomNav active="archive" /></main>;
 
-  if (mode === "archive") return <main className="app-shell record-page"><section className="record-content archive-content"><header className="record-head"><button onClick={() => navigate(-1)}>‹</button><h1>보관함</h1><strong>{balance.toLocaleString()}P</strong></header><p className="archive-lead">오늘의 경험을 차곡차곡 모아 보세요.</p>{titles.map((title) => <span className="archive-title" key={title}>✦ {title}</span>)}<CollectionCard onOpen={() => setCollectionOpen(true)} />{collectionOpen && <CollectionModal onClose={() => setCollectionOpen(false)} />}{saveResult && <p className="record-earned">{saveResult.points_added > 0 ? `기록 +${saveResult.points_added}P` : "기록을 저장했어요"}{saveResult.completion_bonus > 0 ? ` · 완주 보너스 +${saveResult.completion_bonus}P` : ""}</p>}<section className="archive-list">{records.length ? records.map((record) => <button className="archive-card" key={record.record_id} onClick={() => setSelectedRecord(record)}><small>{record.created_at.slice(0, 10).replaceAll("-", ".")}</small><b>{record.title}</b><span>{record.tags.map((tag) => `#${tag}`).join("  ")}</span>{!record.verified && <em>인증 없음</em>}</button>) : <p className="archive-empty">아직 저장한 기록이 없어요.<br />오늘의 경험을 첫 기록으로 남겨 보세요.</p>}</section>{error && <p className="form-error">{error}</p>}<button className="delete-records" type="button" onClick={() => setDeleteOpen(true)}>내 기록 전체 삭제</button></section><BottomNav active="archive" />{deleteOpen && <div className="modal-backdrop delete-modal"><section role="dialog" aria-modal="true"><h2>기록을 모두 삭제할까요?</h2><p>모든 기록·스탬프·포인트가 삭제돼요.<br />개인 식별이 불가능한 통계는 유지됩니다.</p><div><button onClick={() => setDeleteOpen(false)}>취소</button><button onClick={deleteAll}>전체 삭제</button></div></section></div>}</main>;
+  if (mode === "archive") return <main className="app-shell record-page"><section className="record-content archive-content"><header className="record-head"><button onClick={goBackArchive}>‹</button><h1>보관함</h1><strong>{balance.toLocaleString()}P</strong></header><p className="archive-lead">오늘의 경험을 차곡차곡 모아 보세요.</p>{titles.map((title) => <span className="archive-title" key={title}>✦ {title}</span>)}<CollectionCard onOpen={() => setCollectionOpen(true)} />{collectionOpen && <CollectionModal onClose={() => setCollectionOpen(false)} />}{saveResult && <p className="record-earned">{saveResult.points_added > 0 ? `기록 +${saveResult.points_added}P` : "기록을 저장했어요"}{saveResult.completion_bonus > 0 ? ` · 완주 보너스 +${saveResult.completion_bonus}P` : ""}</p>}<section className="archive-list">{records.length ? records.map((record) => <button className="archive-card" key={record.record_id} onClick={() => setSelectedRecord(record)}><small>{record.created_at.slice(0, 10).replaceAll("-", ".")}</small><b>{record.title}</b><span>{record.tags.map((tag) => `#${tag}`).join("  ")}</span>{!record.verified && <em>인증 없음</em>}</button>) : <p className="archive-empty">아직 저장한 기록이 없어요.<br />오늘의 경험을 첫 기록으로 남겨 보세요.</p>}</section>{error && <p className="form-error">{error}</p>}<button className="delete-records" type="button" onClick={() => setDeleteOpen(true)}>내 기록 전체 삭제</button></section><BottomNav active="archive" />{deleteOpen && <div className="modal-backdrop delete-modal"><section role="dialog" aria-modal="true"><h2>기록을 모두 삭제할까요?</h2><p>모든 기록·스탬프·포인트가 삭제돼요.<br />개인 식별이 불가능한 통계는 유지됩니다.</p><div><button onClick={() => setDeleteOpen(false)}>취소</button><button onClick={deleteAll}>전체 삭제</button></div></section></div>}</main>;
 
-  return <main className="app-shell record-page"><section className="record-content"><header className="record-head"><button onClick={() => navigate(-1)}>‹</button><h1>오늘을 기록해 볼까요?</h1><strong>{balance.toLocaleString()}P</strong></header><p className="record-subtitle">짧게 답해 주시면 오늘의 경험을 기록으로 정리해 드려요.</p><section className="purpose-section"><h2>이 기록을 어디에 쓸까요?</h2><div>{[["portfolio", "포트폴리오"], ["hobby", "취미 아카이브"], ["learning", "배움일지"]].map(([value, label]) => <button className={purpose === value ? "selected" : ""} key={value} onClick={() => setPurpose(value)}>{label}</button>)}</div></section><p className="privacy-hint">실명·연락처는 적지 마세요.</p>{RECORD_QUESTIONS.map((item, index) => <section className="record-question" key={item.question}><h2>{index + 1}. {item.question}</h2><div className="answer-chips">{item.chips.map((chip) => <button className={pickedChips[index] === chip ? "selected" : ""} key={chip} onClick={() => chooseChip(index, chip)}>{chip}</button>)}</div><textarea value={answers[index]} maxLength={200} placeholder="직접 적어도 좋아요 (최대 200자)" onChange={(event) => setAnswers((current) => current.map((value, answerIndex) => answerIndex === index ? event.target.value : value))} /></section>)}{!hasAnswer && <p className="answer-warning">한 가지만 골라주시면 포인트가 적립돼요 (+60점)</p>}<button className="draft-button" disabled={generating || Boolean(draft && regenerations >= 2)} onClick={generateDraft}>{generating ? "AI가 기록을 정리하고 있어요…" : draft ? `다시 생성 (${2 - regenerations}회 남음)` : "AI 초안 만들기"}</button>{slowNotice && <p className="slow-notice">연결이 느려 기본 초안을 먼저 드려요.</p>}{draft && <section className="draft-editor"><h2>AI 초안</h2><input value={draft.title} maxLength={100} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /><textarea value={draft.body} maxLength={500} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} /><div className="record-tags">{draft.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div><button className="primary-button" onClick={saveRecord} disabled={saving}>{saving ? "저장하는 중…" : "기록 저장하기"}</button></section>}{error && <p className="form-error">{error}</p>}</section><BottomNav active="quest" /></main>;
+  return <main className="app-shell record-page"><section className="record-content"><header className="record-head"><button onClick={goBackWrite}>‹</button><h1>오늘을 기록해 볼까요?</h1><strong>{balance.toLocaleString()}P</strong></header><p className="record-subtitle">짧게 답해 주시면 오늘의 경험을 기록으로 정리해 드려요.</p><section className="purpose-section"><h2>이 기록을 어디에 쓸까요?</h2><div>{[["portfolio", "포트폴리오"], ["hobby", "취미 아카이브"], ["learning", "배움일지"]].map(([value, label]) => <button className={purpose === value ? "selected" : ""} key={value} onClick={() => setPurpose(value)}>{label}</button>)}</div></section><p className="privacy-hint">실명·연락처는 적지 마세요.</p>{RECORD_QUESTIONS.map((item, index) => <section className="record-question" key={item.question}><h2>{index + 1}. {item.question}</h2><div className="answer-chips">{item.chips.map((chip) => <button className={pickedChips[index] === chip ? "selected" : ""} key={chip} onClick={() => chooseChip(index, chip)}>{chip}</button>)}</div><textarea value={answers[index]} maxLength={200} placeholder="직접 적어도 좋아요 (최대 200자)" onChange={(event) => setAnswers((current) => current.map((value, answerIndex) => answerIndex === index ? event.target.value : value))} /></section>)}{!hasAnswer && <p className="answer-warning">한 가지만 골라주시면 포인트가 적립돼요 (+60점)</p>}<button className="draft-button" disabled={generating || Boolean(draft && regenerations >= 2)} onClick={generateDraft}>{generating ? "AI가 기록을 정리하고 있어요…" : draft ? `다시 생성 (${2 - regenerations}회 남음)` : "AI 초안 만들기"}</button>{slowNotice && <p className="slow-notice">연결이 느려 기본 초안을 먼저 드려요.</p>}{draft && <section className="draft-editor"><h2>AI 초안</h2><input value={draft.title} maxLength={100} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /><textarea value={draft.body} maxLength={500} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} /><div className="record-tags">{draft.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div><button className="primary-button" onClick={saveRecord} disabled={saving}>{saving ? "저장하는 중…" : "기록 저장하기"}</button></section>}{error && <p className="form-error">{error}</p>}</section><BottomNav active="quest" /></main>;
 }
 
 function RecommendHandoff() {
   const navigate = useNavigate();
   const { state } = useLocation();
+  // 홈에서 방금 넘어온 경우가 아니면(탭·새로고침·딥링크) 저장된 스냅샷을 재표시 — 재호출 없음(계약 §3)
+  const snapshot = state?.result ? { request: state.request, result: state.result } : loadRecoSnapshot();
   const [loading, setLoading] = React.useState(Boolean(state?.result));
   const [moreShown, setMoreShown] = React.useState(false);
 
@@ -807,9 +919,10 @@ function RecommendHandoff() {
     return () => window.clearTimeout(timer);
   }, [state?.result]);
 
-  if (!state?.result) return <PendingScreen title="추천을 준비하고 있어요" description="홈에서 조건을 선택하면 오늘의 퀘스트를 추천해 드려요." />;
+  if (!snapshot?.result) return <PendingScreen title="아직 받은 추천이 없어요" description="홈에서 조건을 선택하면 오늘의 퀘스트를 추천해 드려요." />;
 
-  const result = state.result;
+  const result = snapshot.result;
+  const isEmpty = result.quests.length === 0;
   const quests = moreShown ? [...result.quests, ...result.more] : result.quests;
   const hasMore = result.more.length > 0 && !moreShown;
 
@@ -817,10 +930,16 @@ function RecommendHandoff() {
     <main className="app-shell">
       <div className="recommend-content">
         <AppHeader balance={0} titles={[]} health={null} />
-        <button className="back-link" type="button" onClick={() => navigate("/", { state: { lastRequest: state.request, lastResult: state.result } })}>‹ 조건 다시 고르기</button>
+        <button className="back-link" type="button" onClick={() => navigate("/", { state: { lastRequest: snapshot.request, lastResult: snapshot.result } })}>‹ 조건 다시 고르기</button>
         <h1>오늘의 추천 퀘스트</h1>
         <p className="recommend-summary">선택한 시간과 출발지에서 가볍게 즐길 수 있는 코스예요.</p>
-        {loading ? <RecommendationSkeleton /> : (
+        {loading ? <RecommendationSkeleton /> : isEmpty ? (
+          <section className="recommend-empty">
+            <p className="relaxed-notice">{result.relaxed?.message ?? "지금 조건에 맞는 활동이 없어요"}</p>
+            <p>시간 창을 넓히거나 관심사를 바꿔보세요.</p>
+            <button className="primary-button" type="button" onClick={() => navigate("/", { state: { lastRequest: snapshot.request } })}>조건 바꾸기</button>
+          </section>
+        ) : (
           <>
             {result.relaxed && <p className="relaxed-notice">{result.relaxed.message}</p>}
             <p className="market-notice">골목의 <b>숨은 가게</b>를 먼저 소개해 드려요 — 순위에 상권 기여 30%가 반영돼요.</p>
@@ -984,11 +1103,26 @@ function DashboardScreen() {
   </main>;
 }
 
+// 가게 QR 스탠드 딥링크(계약 §0: /verify?m=<merchant_id>&c=<4자리>) — 진행 중 퀘스트가 있으면 그 인증으로 연결
+function VerifyDeepLink() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const code = params.get("c") ?? "";
+    const activeId = localStorage.getItem("active_quest_id");
+    if (activeId) navigate(`/verify/${activeId}`, { replace: true, state: { code } });
+    else navigate("/", { replace: true, state: { qrNotice: true } });
+  }, [navigate, location.search]);
+  return null;
+}
+
 function RouterApp() {
   return <Routes>
     <Route path="/" element={<Home />} />
     <Route path="/recommend" element={<RecommendHandoff />} />
     <Route path="/quests/:questId" element={<QuestDetail />} />
+    <Route path="/verify" element={<VerifyDeepLink />} />
     <Route path="/verify/:questId" element={<VerifyScreen />} />
     <Route path="/records/:questId" element={<RecordScreen />} />
     <Route path="/records" element={<RecordScreen />} />
