@@ -114,7 +114,7 @@ function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon }) {
           }
           return (
             <text key={`label-${f.properties?.zone_code}`} x={cx} y={cy} textAnchor="middle" pointerEvents="none" style={{ font: "700 9px Pretendard,sans-serif", fill: PIECE_STYLE[st].label }}>
-              {f.properties?.name}
+              {(f.properties?.name ?? "").split(" ").pop()}
             </text>
           );
         })}
@@ -163,7 +163,7 @@ export function CollectionModal({ onClose }) {
     { label: "봄내 완주", done: complete, sub: complete ? "달성" : `${n}/${m || "—"}` },
   ];
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(10,26,36,.55)", display: "flex", alignItems: "flex-end", zIndex: 55, backdropFilter: "blur(2px)" }}>
+    <div onClick={onClose} style={{ position: "fixed", top: 0, bottom: 0, left: "50%", width: "min(100%, 430px)", transform: "translateX(-50%)", background: "rgba(10,26,36,.55)", display: "flex", alignItems: "flex-end", zIndex: 55, backdropFilter: "blur(2px)" }}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style={{ background: "#fff", borderRadius: "22px 22px 0 0", padding: "22px 20px 30px", width: "100%", boxSizing: "border-box", maxHeight: "86%", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ font: "800 18px Pretendard,sans-serif", color: NAVY }}>봄내 조각 컬렉션</div>
