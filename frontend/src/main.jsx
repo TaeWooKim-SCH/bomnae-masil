@@ -204,6 +204,7 @@ function Home() {
   const [stopId, setStopId] = React.useState(initialRequest?.origin?.stop_id ?? "");
   const pendingStopRef = React.useRef(initialRequest?.origin?.stop_id ?? "");
   const [stopQuery, setStopQuery] = React.useState("");
+  const [stopSearchOpen, setStopSearchOpen] = React.useState(false);
   const [time, setTime] = React.useState(initialRequest
     ? { start: initialRequest.time_window.start.slice(11, 16), end: initialRequest.time_window.end.slice(11, 16) }
     : INITIAL_TIME);
@@ -256,9 +257,11 @@ function Home() {
       setStops([]);
       setStopId("");
       setStopQuery("");
+      setStopSearchOpen(false);
       return;
     }
     setStopsLoading(true);
+    setStopSearchOpen(false);
     const keepStopId = pendingStopRef.current;
     pendingStopRef.current = "";
     setStopId(keepStopId || "");
@@ -386,15 +389,19 @@ function Home() {
                 {stops.map((stop) => <option key={stop.stop_id} value={stop.stop_id}>{stop.name}</option>)}
               </select>
             </div>
-            {zoneCode && (
+            {zoneCode && !stopSearchOpen && (
+              <button className="custom-budget-link" type="button" onClick={() => setStopSearchOpen(true)}>정류장 이름으로 찾아볼래요 →</button>
+            )}
+            {zoneCode && stopSearchOpen && (
               <div className="stop-select">
-                <input id="stop-search" className="text-input" value={stopQuery} onChange={(event) => setStopQuery(event.target.value)} placeholder="정류장 이름으로 찾아보기" aria-label="정류장 이름으로 찾아보기" />
+                <input id="stop-search" className="text-input" value={stopQuery} onChange={(event) => setStopQuery(event.target.value)} placeholder="정류장 이름으로 찾아보기" aria-label="정류장 이름으로 찾아보기" autoFocus />
                 <div className="stop-options" aria-label={`${selectedZone?.name ?? ""} 정류장 목록`}>
                   <button type="button" className={!stopId ? "stop-option selected" : "stop-option"} onClick={() => setStopId("")}>잘 모르겠어요</button>
                   {stopsLoading ? <p className="loading-copy">정류장을 불러오는 중이에요.</p> : filteredStops.map((stop) => (
                     <button type="button" key={stop.stop_id} className={stopId === stop.stop_id ? "stop-option selected" : "stop-option"} onClick={() => setStopId(stop.stop_id)}>{stop.name}</button>
                   ))}
                 </div>
+                <button className="custom-budget-link" type="button" onClick={() => setStopSearchOpen(false)}>← 목록 접기</button>
               </div>
             )}
           </div>
@@ -454,7 +461,13 @@ function Home() {
 
 function PendingScreen({ title, description }) {
   const navigate = useNavigate();
-  return <main className="app-shell pending-screen"><AppHeader balance={0} titles={[]} health={null} /><section><p className="eyebrow">봄내마실</p><h1>{title}</h1><p>{description}</p><button className="primary-button" type="button" onClick={() => navigate("/")}>홈으로 돌아가기</button></section><BottomNav /></main>;
+  const [balance, setBalance] = React.useState(0);
+  const [titles, setTitles] = React.useState([]);
+  React.useEffect(() => {
+    if (!localStorage.getItem("session_id")) return;
+    api.getRecords().then((data) => { setBalance(data.balance ?? 0); setTitles(data.titles ?? []); }).catch(() => { /* 빈 상태 화면에서는 잔액 조회 실패를 조용히 넘긴다 */ });
+  }, []);
+  return <main className="app-shell pending-screen"><AppHeader balance={balance} titles={titles} health={null} /><section><span className="pending-icon" aria-hidden="true"><NavIcon name="quest" /></span><h1>{title}</h1><p>{description}</p><button className="primary-button" type="button" onClick={() => navigate("/")}>홈으로 돌아가기</button></section><BottomNav /></main>;
 }
 
 const SCORE_ITEMS = [
