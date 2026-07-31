@@ -8,6 +8,8 @@ outputs, stages every table, and replaces all four tables in one transaction.
 
 import csv
 import io
+
+from .venue_quality import clean_venue_name, is_non_activity
 import os
 from pathlib import Path
 
@@ -109,6 +111,8 @@ def _activity_rows() -> list[dict[str, str]]:
     zones = _load_zones()
     seen: set[str] = set()
     for row in culture:
+        if is_non_activity(row["name"]):  # 모집·공고·대관은 활동이 아니다 (#128)
+            continue
         _coordinates(row, row["activity_id"])
         if not in_chuncheon_bounds(float(row["longitude"]), float(row["latitude"])):
             continue
@@ -119,6 +123,7 @@ def _activity_rows() -> list[dict[str, str]]:
         converted = {column: row.get(column, "") for column in ACTIVITY_COLUMNS}
         converted[INTEREST_TAGS_COLUMN] = _interest_tags(row.get(INTEREST_TAGS_COLUMN, ""), row["activity_id"])
         converted[ACTIVITY_ZONE_COLUMN] = _zone_for_stop(float(row["longitude"]), float(row["latitude"]), zones)
+        converted["venue_name"] = clean_venue_name(converted["venue_name"])  # 주소 전문 → 장소명 (#128)
         rows.append(converted)
         seen.add(row["activity_id"])
     for seed in seeds:
