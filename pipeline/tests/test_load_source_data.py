@@ -39,7 +39,21 @@ def test_always_open_seed_is_converted_to_activity_contract(monkeypatch):
     assert rows[1]["needs_geocode"] == "False"
     assert rows[1]["schedule_text"] == "09:00-18:00"
     assert rows[1]["runtime_text"].startswith("60")
-    assert rows[1]["interest_tags"] == "학습·어학"
+
+
+def test_outside_chuncheon_culture_activity_is_not_loaded(monkeypatch):
+    culture = [{
+        "activity_id": "outside", "source_event_id": "1", "name": "outside", "type": "당일형", "status": "진행중", "genre": "전시",
+        "start_date": "2026-08-01", "end_date": "2026-08-01", "schedule_text": "", "runtime_text": "", "price_krw": "0", "price_unknown": "False",
+        "audience_text": "", "venue_name": "outside", "longitude": "128.309396", "latitude": "34.981157", "needs_geocode": "False", "source_url": "", "poster_url": "",
+    }]
+    seed = {"activity_id": "always_open_place", "name": "seed", "type": "상시형", "place_name": "seed", "latitude": "37.8", "longitude": "127.7", "interest_tags": "학습·어학", "price_krw": "0", "open_time": "09:00", "close_time": "18:00", "source": "manual"}
+    monkeypatch.setattr(load_source_data, "_read_rows", lambda name, _: culture if name == "activities_geocoded.csv" else [seed])
+
+    rows = load_source_data._activity_rows()
+
+    assert [row["activity_id"] for row in rows] == ["always_open_place"]
+    assert rows[0]["interest_tags"] == "학습·어학"
 
 
 def test_legacy_floating_month_is_normalized_to_first_day(monkeypatch):

@@ -116,6 +116,14 @@ python -m pipeline.load.load_accessibility_scores --rebuild
 `DATABASE_URL`은 `backend/.env` 또는 실행 환경에만 둔다. 실제 접속값·생성된 CSV는
 Git에 올리지 않는다.
 
+문화행사 원천 중 좌표가 춘천시 범위 밖인 행은 지오코딩·점수표·DB 적재에서 제외한다.
+이미 적재된 활동 원천만 바로잡아야 할 때는 다른 R3-2 테이블을 재적재하지 않고 아래
+전용 명령을 사용한다.
+
+```powershell
+python -m pipeline.load.load_activities
+```
+
 ## 관심사 칩·행정동 정규화 (#48)
 
 `pipeline/seeds/activity_interest_mapping.csv`는 활동 분류·제목 키워드를 API 계약의
@@ -132,3 +140,21 @@ Git에 올리지 않는다.
 ```powershell
 python -m pipeline.load.load_zone_reference
 ```
+
+## 데모 시나리오 데이터 검증 (#13)
+
+R4가 확정한 관심사·출발 동·시간·예산 3세트는
+`pipeline/seeds/demo_scenarios.json`에 둔다. 아래 명령은 고정된
+`demo_now`를 기준으로 날짜·예산·관심사·무환승 접근성, 활동별 500m 가게 수와
+전수 품질을 검사한다.
+
+```powershell
+.\.venv\Scripts\python.exe -m pipeline.load.validate_demo_scenarios
+```
+
+결과는 Git 제외 대상인 `pipeline/output/demo_scenario_validation.json`에 생성된다.
+시간 조건은 최단 접근성 소요 + 고정 버퍼 10분 + 활동 60분이 사용자의 시간 창에
+들어가는지로 검사한다. `schedule_text`는 자유 텍스트여서 장소의 실제 개장 시각은
+별도 경고로 남긴다. `확정저유입` 비율은 #26의 동결 판정 결과만 보고하며, 이 스크립트는
+가게 상태를 변경하지 않는다. 춘천 범위 밖 좌표는 후보에서 제외하고 품질 항목에
+별도로 남긴다.

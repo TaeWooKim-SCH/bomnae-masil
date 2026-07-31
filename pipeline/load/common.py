@@ -98,6 +98,11 @@ def valid_wgs84(longitude: float | None, latitude: float | None) -> bool:
     )
 
 
+def in_chuncheon_bounds(longitude: float | None, latitude: float | None) -> bool:
+    """Return whether a WGS84 point is inside the fixed Chuncheon intake range."""
+    return valid_wgs84(longitude, latitude) and 126.8 <= longitude <= 128.0 and 37.5 <= latitude <= 38.1
+
+
 def stable_id(prefix: str, value: str) -> str:
     """Make deterministic output IDs without exposing a source's formatting quirks."""
     normalised = re.sub(r"[^0-9A-Za-z가-힣_-]+", "-", clean_text(value)).strip("-")
