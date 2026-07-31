@@ -11,6 +11,8 @@ ONLINE = re.compile(r"온라인|비대면|줌|화상|원격", re.IGNORECASE)
 # Keep only source-ID-specific corrections with a documented public source.
 VENUE_OVERRIDES = {
     "12590": "조운동 도시재생현장지원센터",
+    "12582": "화동2571",
+    "12608": "춘천인형극장",
 }
 
 
