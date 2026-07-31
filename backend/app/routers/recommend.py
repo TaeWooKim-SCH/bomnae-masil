@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
+from app.core.kpi import record_cards_exposed
 from app.db import get_db
 from app.deps import get_current_session
-from app.models import Quest
+from app.models import Merchant, Quest
 from app.timebase import now_kst
 
 logger = logging.getLogger("bomnae")
@@ -134,6 +135,21 @@ def recommend(body: RecommendRequest, current=Depends(get_current_session), db=D
                 created_at=created_at,
             )
         )
+
+    # 익명 KPI: 노출 카드 이벤트(#36) — 저유입 판정은 merchants.inflow_status 조회(목 가게는 None)
+    merchant_ids = [c["mission"]["merchant_id"] for c in cards if c["mission"]]
+    inflow_by_merchant = (
+        dict(
+            db.execute(
+                select(Merchant.merchant_id, Merchant.inflow_status).where(
+                    Merchant.merchant_id.in_(merchant_ids)
+                )
+            ).all()
+        )
+        if merchant_ids
+        else {}
+    )
+    record_cards_exposed(db, cards, inflow_by_merchant)
     db.commit()
 
     return {

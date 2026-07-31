@@ -5,6 +5,7 @@
 """
 from .base import Base
 from .cache import ApiCache
+from .kpi import KpiEvent
 from .catalog import (
     Activity,
     BusStop,
@@ -27,6 +28,7 @@ from .user import (
 __all__ = [
     "Base",
     "ApiCache",
+    "KpiEvent",
     "Activity",
     "BusStop",
     "FloatingPopulation",

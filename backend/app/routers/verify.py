@@ -12,6 +12,7 @@ from pydantic import BaseModel, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.core.kpi import record_stamp_event
 from app.core.points import REASON_STAMP, add_points, balance_of
 from app.db import get_db
 from app.deps import get_current_session
@@ -95,6 +96,7 @@ def verify_quest(
         )
         quest.status = "stamped"
         balance, unlocked = add_points(db, current.id, quest.id, STAMP_POINTS, REASON_STAMP)
+        record_stamp_event(db, stamp_type, amount)  # 익명 KPI(#36) — 경합 패자는 롤백으로 소멸
         db.commit()
     except IntegrityError:  # 동시 인증 경합 — 먼저 찍힌 스탬프가 승자, 패자는 멱등 응답
         db.rollback()
