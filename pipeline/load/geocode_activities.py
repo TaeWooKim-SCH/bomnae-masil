@@ -22,6 +22,17 @@ INPUT_NAME = "activities.csv"
 CACHE_NAME = "activity_geocode_cache.csv"
 OUTPUT_NAME = "activities_geocoded.csv"
 KAKAO_URL = "https://dapi.kakao.com/v2/local/search/address.json"
+BACKEND_ENV = Path(__file__).resolve().parents[2] / "backend" / ".env"
+
+
+def load_backend_env() -> None:
+    """Load local-only backend/.env without overwriting shell-provided secrets."""
+    if not BACKEND_ENV.is_file():
+        return
+    for line in BACKEND_ENV.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key.strip() and not key.lstrip().startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def _documents(payload: bytes) -> list[dict[str, object]]:
@@ -95,6 +106,7 @@ def main() -> None:
     parser.add_argument("--input", type=Path, default=output_dir() / INPUT_NAME)
     parser.add_argument("--cache", type=Path, default=output_dir() / CACHE_NAME)
     args = parser.parse_args()
+    load_backend_env()
     api_key = os.environ.get("KAKAO_REST_API_KEY")
     if not api_key:
         raise SystemExit("KAKAO_REST_API_KEY is required in the local environment; never commit it.")
