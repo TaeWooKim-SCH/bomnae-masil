@@ -32,4 +32,5 @@ docs/       설계 문서
 - 파이썬 공통(최초 1회): `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.lock.txt` — Windows는 activate 대신 `.venv\Scripts\activate`. lock이 없을 때만 `pip install -r backend/requirements.txt -r pipeline/requirements.txt`. 이후 매 세션 activate만
 - backend: `cd backend && uvicorn app.main:app --reload`
 - pipeline: `cd pipeline && python -m load.run_all`
-- 오프라인 스택: `docker compose up`
+- 오프라인 스택(#8): 첫 1회(온라인) `docker compose build` → 데이터 복사 `./scripts/sync_local.sh`(통합2·리허설 직후) → 이후 오프라인에서도 `docker compose up -d` 만으로 화면(5173)→서버(8000)→DB(55433) 완주
+- 서버만 로컬 모드로 돌리려면: `cp backend/.env.local backend/.env` (복귀는 팀 비밀 저장소 URI로 원복)

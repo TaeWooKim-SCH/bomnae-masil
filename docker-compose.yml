@@ -1,0 +1,51 @@
+# 오프라인 스택(#8) — 시연장 인터넷이 죽어도 노트북 한 대로 데모 완주 (10-architecture 원칙4·8장)
+# 첫 1회(온라인): docker compose build && docker compose up -d && ./scripts/sync_local.sh
+# 이후(오프라인 가능): docker compose up -d
+# 주의: 이미지 버전은 Supabase 서버(PG 17.6·PostGIS 3.3)와 major를 맞춘다 — 낮으면 pg_dump 실패
+# 주의: postgis 확장은 이 이미지의 init이 만들어 준다 — 덤프(--schema=public)에는 CREATE EXTENSION이
+#       없으므로 순정 postgres 이미지로 바꾸면 복원이 깨진다
+name: bomnae-masil
+
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    platform: linux/amd64 # 이 태그는 arm64 미제공 — 애플 실리콘에선 Rosetta 에뮬레이션으로 구동(데모 규모 OK)
+    ports:
+      - "55433:5432" # 로컬의 다른 Postgres·도커 스택과 충돌 방지 (5433도 점유 사례 있어 상향)
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - bomnae-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      CACHE_ONLY: "1" # 오프라인 — 외부(LLM) 호출 금지, 캐시 미스는 템플릿 폴백
+      CORS_ORIGINS: http://localhost:5173
+      # DEMO_NOW: "2026-08-02T14:00"  # 시연 시각 고정이 필요하면 주석 해제 (#19 대본)
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend # R1 코드를 읽기만 한다 — Dockerfile은 docker/ (폴더 소유 규칙)
+      dockerfile: ../docker/frontend.Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+        VITE_KAKAO_MAP_KEY: ${VITE_KAKAO_MAP_KEY:-} # 지도는 온라인 전용(카카오 SDK) — 오프라인에선 안 뜨는 게 정상
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  bomnae-db:
