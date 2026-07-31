@@ -104,6 +104,16 @@ def stable_id(prefix: str, value: str) -> str:
     return f"{prefix}_{normalised}" if normalised else ""
 
 
+def normalise_chuncheon_zone_code(value: str | None) -> str:
+    """Use the 42110 administrative-district prefix used by the boundary GeoJSON.
+
+    Some public population extracts still use Chuncheon's pre-2023 51110 prefix.
+    The suffix identifies the same 읍·면·동, so only that prefix is translated.
+    """
+    code = clean_text(value)
+    return f"421{code[3:]}" if code.startswith("51110") else code
+
+
 def write_report(report: dict[str, object]) -> None:
     target = output_dir() / "quality_report.json"
     target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
