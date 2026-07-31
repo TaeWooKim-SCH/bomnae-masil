@@ -6,13 +6,14 @@
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from app.core.coords import resolve_coords
+from app.core.kpi import record_first_start, record_quest_started
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import Quest
-from app.core.coords import resolve_coords
 from app.timebase import now_kst
 
 router = APIRouter(prefix="/quests", tags=["quests"])
@@ -25,8 +26,8 @@ def _not_found() -> HTTPException:
     return HTTPException(404, detail={"code": "NOT_FOUND", "message": "요청한 주소를 찾을 수 없어요"})
 
 
-def _get_own_quest(db, quest_id: str, session_id: str) -> Quest:
-    quest = db.get(Quest, quest_id)
+def _get_own_quest(db, quest_id: str, session_id: str, for_update: bool = False) -> Quest:
+    quest = db.get(Quest, quest_id, with_for_update=for_update)
     if quest is None or quest.session_id != session_id:  # 남의 퀘스트도 동일 404 — 존재 비노출
         raise _not_found()
     return quest
@@ -54,7 +55,9 @@ def start_quest(
     current=Depends(get_current_session),
     db=Depends(get_db),
 ):
-    quest = _get_own_quest(db, quest_id, current.id)
+    # 행 잠금 — 같은 퀘스트 동시 start를 직렬화해 KPI 이벤트 중복 적재 방지(검수 반영).
+    # 패자는 잠금 해제 후 최신 상태(started)를 읽어 멱등 200으로 빠진다
+    quest = _get_own_quest(db, quest_id, current.id, for_update=True)
 
     if quest.status in _IN_PROGRESS:
         # 자기 재진입은 멱등 200 — stamped를 409로 막으면 계약의 복구 경로(abandon 재요청)가
@@ -89,8 +92,29 @@ def start_quest(
             q.status = "abandoned"
         db.flush()  # 중단을 먼저 반영 — 부분 유니크 인덱스(진행 중 1건)의 일시 위반 방지
 
+    first_ever_start = quest.started_at is None  # abandoned 재시작은 이미 센 퀘스트 — 중복 집계 방지
+    # 조회는 변이 전에 — 변이 후 SELECT는 autoflush로 유니크 위반을 try 밖에서 터뜨린다(검수 반영)
+    session_first = first_ever_start and (
+        db.scalar(
+            select(func.count())
+            .select_from(Quest)
+            .where(
+                Quest.session_id == current.id,
+                Quest.started_at.is_not(None),
+                Quest.id != quest.id,
+            )
+        )
+        == 0
+    )
     quest.status = "started"
     quest.started_at = now_kst()
+    if first_ever_start:
+        # 익명 KPI(#36): started 이벤트 + 세션의 첫 시작이면 탐색 시간(간격만 저장 — 익명)
+        record_quest_started(db, has_mission=quest.merchant_id is not None)
+        search_min = (quest.started_at - current.created_at).total_seconds() / 60
+        if session_first and search_min > 0:
+            # 간격 0 = DEMO_NOW 고정 상태의 산출물 — 실측이 아니므로 중앙값에 넣지 않는다(검수 반영)
+            record_first_start(db, search_min)
     try:
         db.commit()
     except IntegrityError:
