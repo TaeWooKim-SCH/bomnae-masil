@@ -7,6 +7,13 @@ from .common import clean_text, read_csv, require_columns, source_path, stable_i
 SOURCE = "춘천 문화 정보.csv"
 DATE_RANGE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:\s*~\s*(\d{4}-\d{2}-\d{2}))?$")
 ONLINE = re.compile(r"온라인|비대면|줌|화상|원격", re.IGNORECASE)
+# Official Moabom listings occasionally omit their card's venue attribute.
+# Keep only source-ID-specific corrections with a documented public source.
+VENUE_OVERRIDES = {
+    "12590": "조운동 도시재생현장지원센터",
+    "12582": "화동2571",
+    "12608": "춘천인형극장",
+}
 
 
 def _price(price: str) -> tuple[int | None, bool]:
@@ -38,7 +45,7 @@ def run() -> dict[str, int]:
             "name": title, "type": "당일형", "status": clean_text(event.get("status")),
             "genre": clean_text(event.get("category")), "start_date": match.group(1), "end_date": match.group(2) or match.group(1),
             "schedule_text": "", "runtime_text": "", "price_krw": price_krw, "price_unknown": price_unknown,
-            "audience_text": clean_text(event.get("target_age")), "venue_name": clean_text(event.get("address")),
+            "audience_text": clean_text(event.get("target_age")), "venue_name": clean_text(event.get("address")) or VENUE_OVERRIDES.get(source_id, ""),
             "longitude": "", "latitude": "", "needs_geocode": True,
             "source_url": "https://cccf.or.kr/moa" if source == "moabom" else "https://www.cccf.or.kr/home",
             "poster_url": clean_text(event.get("image_url")),
