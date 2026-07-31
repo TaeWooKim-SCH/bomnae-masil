@@ -639,6 +639,7 @@ function QuestDetail() {
   const [error, setError] = React.useState("");
   const [starting, setStarting] = React.useState(false);
   const [startConflict, setStartConflict] = React.useState(false);
+  const [justStarted, setJustStarted] = React.useState(false);
   const [mapExpanded, setMapExpanded] = React.useState(false);
 
   React.useEffect(() => {
@@ -660,8 +661,10 @@ function QuestDetail() {
       const result = await api.startQuest(quest.quest_id, { abandon_current: abandonCurrent });
       localStorage.setItem("active_quest_id", quest.quest_id);
       setQuest((current) => ({ ...current, status: result.status, started_at: result.started_at }));
-      // 가게 없는 퀘스트는 인증이 없다(계약 §4 NO_MISSION) — 기록으로 바로
-      navigate(quest.mission ? `/verify/${quest.quest_id}` : `/records/${quest.quest_id}`);
+      // 시작 직후 필요한 정보는 "어떻게 가는가"(지도·경로)다 — 화면을 옮기지 않고 상태만 전환하고,
+      // 다음 할 일을 배너로 안내한다. 인증·기록은 CTA로 언제든 갈 수 있다.
+      setJustStarted(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (requestError) {
       if (recoverSession(requestError)) return;
       if (requestError?.error?.code === "QUEST_IN_PROGRESS") setStartConflict(true);
@@ -678,6 +681,12 @@ function QuestDetail() {
     <QuestMap quest={quest} expanded={mapExpanded} onToggleExpanded={() => setMapExpanded((current) => !current)} />
     <button className="detail-back" type="button" onClick={goBack} aria-label="추천 목록으로 돌아가기">‹</button>
     <section className="detail-content">
+      {justStarted && (
+        <div className="quest-started-banner" role="status">
+          <strong>퀘스트를 시작했어요</strong>
+          <p>{quest.route.route_no}번 버스로 {quest.activity.place_name}까지 이동해 보세요{hasMission ? ` · 활동 후 ${quest.mission.merchant_name}에서 미션 인증` : " · 다녀와서 기록을 남기면 완주예요"}</p>
+        </div>
+      )}
       <div className="detail-title-row"><div><p className="detail-type">{quest.activity.type}</p><h1>{quest.title}</h1></div><span className="point-badge">최대 {quest.max_points}P</span></div>
       <p className="detail-schedule">{quest.activity.place_name} · {quest.activity.schedule_text} · {quest.activity.price_krw === 0 ? "무료" : `입장 ${formatKrw(quest.activity.price_krw)}`}</p>
       {quest.activity.d_day !== null && <><span className="detail-dday">개강 D-{quest.activity.d_day}</span><p className="today-todo"><b>오늘 할 일</b> — 신청하기 → 장소 미리 가보기 → 근처 가게 미션</p></>}
@@ -733,7 +742,7 @@ function VerifyScreen() {
       const activity = detail?.coords?.activity;
       const feature = activity ? findDongByPoint(collectionFeatures, activity.lat, activity.lng) : null;
       const code = feature?.properties?.zone_code;
-      if (feature && isCore(feature) && !collectionZoneMap.collected.includes(code)) {
+      if (feature && isCore(feature, collectionZoneMap) && !collectionZoneMap.collected.includes(code)) {
         revealNextRef.current = next ?? null;
         setResult(null);
         setReveal(feature);
