@@ -11,7 +11,7 @@ def test_always_open_seed_is_converted_to_activity_contract(monkeypatch):
     }]
     seeds = [{
         "activity_id": "always_open_place", "name": "상시 활동", "type": "상시형", "place_name": "장소",
-        "latitude": "37.8", "longitude": "127.7", "price_krw": "0", "schedule_text": "자유 이용", "source": "수기씨드",
+        "latitude": "37.8", "longitude": "127.7", "interest_tags": "학습·어학", "price_krw": "0", "schedule_text": "자유 이용", "source": "수기씨드",
     }]
 
     monkeypatch.setattr(load_source_data, "_read_rows", lambda name, _: culture if name == "activities_geocoded.csv" else seeds)
@@ -22,6 +22,7 @@ def test_always_open_seed_is_converted_to_activity_contract(monkeypatch):
     assert rows[1]["source_event_id"] == "always_open_place"
     assert rows[1]["start_date"] == "2026-08-01"
     assert rows[1]["needs_geocode"] == "False"
+    assert rows[1]["interest_tags"] == "학습·어학"
 
 
 def test_legacy_floating_month_is_normalized_to_first_day(monkeypatch):
