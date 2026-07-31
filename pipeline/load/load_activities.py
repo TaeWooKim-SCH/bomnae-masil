@@ -8,6 +8,7 @@ activity source must never rewrite merchants, stop routes, or population data.
 
 from .load_source_data import (
     ACTIVITY_COLUMNS,
+    ACTIVITY_ZONE_COLUMN,
     INTEREST_TAGS_COLUMN,
     _activity_rows,
     _csv_stream,
@@ -29,6 +30,8 @@ def load() -> int:
             columns = ACTIVITY_COLUMNS
             if _has_column(cursor, "activities", INTEREST_TAGS_COLUMN):
                 columns += (INTEREST_TAGS_COLUMN,)
+            if _has_column(cursor, "activities", ACTIVITY_ZONE_COLUMN):
+                columns += (ACTIVITY_ZONE_COLUMN,)
             rows = _activity_rows()
             _require_columns(cursor, "activities", columns)
             cursor.execute("LOCK TABLE activities IN SHARE ROW EXCLUSIVE MODE")
