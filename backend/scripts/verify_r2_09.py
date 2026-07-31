@@ -15,7 +15,7 @@ from sqlalchemy import text  # noqa: E402
 
 from app.db import get_engine  # noqa: E402
 from app.main import app  # noqa: E402
-from app.routers._merchant_codes_mock import merchant_code  # noqa: E402
+from app.core.merchant_codes import derived_code as merchant_code  # noqa: E402
 
 client = TestClient(app, raise_server_exceptions=False)
 fails: list[str] = []

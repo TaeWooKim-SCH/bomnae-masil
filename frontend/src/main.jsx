@@ -606,10 +606,11 @@ function VerifyScreen() {
       { fps: 10, qrbox: { width: 210, height: 210 } },
       (text) => {
         let scannedCode = "";
-        try { const payload = new URL(text); scannedCode = payload.searchParams.get("c") ?? ""; } catch { scannedCode = text.slice(-4); }
+        let merchantId = "";
+        try { const payload = new URL(text); scannedCode = payload.searchParams.get("c") ?? ""; merchantId = payload.searchParams.get("m") ?? ""; } catch { scannedCode = text.slice(-4); }
         setCode(scannedCode);
         setScanning(false);
-        verifyCode(scannedCode);
+        verifyCode(scannedCode, "qr", merchantId);
       },
       () => {},
     ).catch(() => {
@@ -626,11 +627,12 @@ function VerifyScreen() {
     return () => { document.body.style.overflow = previousOverflow; };
   }, [result]);
 
-  async function verifyCode(value) {
+  async function verifyCode(value, verificationMethod = "code", merchantId = null) {
     if (value.length !== 4) { setError("QR 코드를 다시 비춰 주세요."); return; }
-    const scenario = value === "0000" ? "already" : value !== "0417" ? "fail" : "success";
+    const scenario = value === "0000" ? "already" : value !== "2097" ? "fail" : "success";
     try {
-      const response = await api.verifyQuest(questId, { method: "code", code: value }, scenario);
+      const body = verificationMethod === "qr" ? { method: "qr", merchant_id: merchantId, code: value } : { method: "code", code: value };
+      const response = await api.verifyQuest(questId, body, scenario);
       setResult(response);
     } catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
   }
@@ -648,6 +650,103 @@ function VerifyScreen() {
   const codeTap = (key) => setCode((v) => key === "del" ? v.slice(0,-1) : v.length < 4 ? v + key : v);
   const formattedAmount = amount ? Number(amount).toLocaleString("ko-KR") : "";
   return <main className={`app-shell verify-page${result ? " is-complete" : ""}`}><section className="verify-content"><header className="verify-head"><button onClick={() => navigate(-1)}>‹</button><h1>가게 미션 인증</h1><b>40P</b></header><div className="merchant-card"><small>미션 장소</small><strong>카페 소양담 (육림고개)</strong><p>전시 보고 나와서, 필름 감성 그대로 따뜻한 한 잔 어때요?</p></div><p className="verify-done">이미 적립된 퀘스트예요 — 기록만 남기면 완주!</p><div className="verify-tabs">{[["qr","QR 스캔"],["code","4자리 코드"],["receipt","영수증"]].map(([key,label]) => <button key={key} className={method===key?"selected":""} onClick={() => { setMethod(key); setError(""); }}>{label}</button>)}</div>{method === "qr" && <div className="verify-panel qr-panel"><div className={`qr-frame${scanning ? " scanning" : ""}`}>{scanning ? <div id="verify-qr-reader" /> : <><QrMark /><p>가게의 QR 스탠드를 비춰주세요</p></>}</div>{!scanning && <button className="scan-button" onClick={() => setScanning(true)}>QR 스캔 시작</button>}<p>카메라가 안 되면 4자리 코드 탭을 이용해 주세요</p></div>}{method === "code" && <div className="verify-panel code-panel"><p>QR 스탠드 아래 적힌 4자리 숫자를 입력해 주세요</p><div className="code-boxes">{[0,1,2,3].map(i=><i key={i}>{code[i]||""}</i>)}</div><div className="keypad">{["1","2","3","4","5","6","7","8","9","","0","del"].map(k=><button key={k} disabled={!k} onClick={()=>codeTap(k)}>{k==="del"?"⌫":k}</button>)}</div></div>}{method === "receipt" && <div className="verify-panel receipt-panel"><p>협약이 안 된 가게도 괜찮아요. 영수증 사진과 금액만 있으면 미션 완료!</p><label className="receipt-upload"><b>＋</b>영수증 사진 찍기 / 올리기<input type="file" accept="image/*" onChange={(e)=>setReceiptName(e.target.files?.[0]?.name??"")} /></label><small>사진은 저장되지 않아요 — 확인 후 바로 폐기돼요</small><input className="receipt-amount" inputMode="numeric" value={formattedAmount} onChange={(e)=>setAmount(e.target.value.replace(/\D/g,""))} placeholder="결제 금액 (1,000~200,000원)" /></div>}{error && <p className="form-error">{error}</p>}<button className="primary-button verify-submit" onClick={verify}>{method==="receipt"?"소비 인증하기":"인증하고 +40P 받기"}</button><button className="text-action record-without" onClick={() => navigate(`/records/${questId}`)}>인증 없이 기록만 남길래요</button></section><BottomNav active="quest" />{result && <VerificationResultModal result={result} onRecord={() => navigate(`/records/${questId}`)} onLater={() => setResult(null)} />}</main>;
+}
+
+const RECORD_QUESTIONS = [
+  { question: "오늘 가장 기억에 남는 순간은 무엇인가요?", chips: ["새로운 풍경", "따뜻한 대화", "몰입했던 순간"] },
+  { question: "새롭게 알게 된 점이 있나요?", chips: ["춘천의 새로운 장소", "활동의 즐거움", "가게의 이야기"] },
+  { question: "다음에는 어떻게 해보고 싶나요?", chips: ["다른 코스도 가보기", "친구와 함께", "다시 천천히"] },
+];
+
+function RecordScreen() {
+  const { questId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [mode, setMode] = React.useState(questId ? "write" : "archive");
+  const [purpose, setPurpose] = React.useState("hobby");
+  const [answers, setAnswers] = React.useState(["", "", ""]);
+  const [pickedChips, setPickedChips] = React.useState([null, null, null]);
+  const [draft, setDraft] = React.useState(null);
+  const [regenerations, setRegenerations] = React.useState(0);
+  const [generating, setGenerating] = React.useState(false);
+  const [slowNotice, setSlowNotice] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [saveResult, setSaveResult] = React.useState(null);
+  const [quest, setQuest] = React.useState(null);
+  const [records, setRecords] = React.useState([]);
+  const [balance, setBalance] = React.useState(0);
+  const [titles, setTitles] = React.useState([]);
+  const [selectedRecord, setSelectedRecord] = React.useState(null);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const resolvedAnswers = answers.map((answer, index) => answer.trim() || (pickedChips[index] ?? ""));
+  const hasAnswer = resolvedAnswers.some(Boolean);
+
+  const loadArchive = React.useCallback(async () => {
+    try {
+      const data = await api.getRecords();
+      setRecords(data.records ?? []);
+      setBalance(data.balance ?? 0);
+      setTitles(data.titles ?? []);
+    } catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
+  }, []);
+
+  React.useEffect(() => { loadArchive(); }, [loadArchive]);
+  React.useEffect(() => {
+    if (!questId) return;
+    api.getQuest(questId).then(setQuest).catch(() => setError("퀘스트 정보를 불러오지 못했어요."));
+  }, [questId]);
+
+  function chooseChip(questionIndex, chip) {
+    setPickedChips((current) => current.map((value, index) => index === questionIndex ? (value === chip ? null : chip) : value));
+  }
+
+  async function generateDraft() {
+    if (!questId || generating || (draft && regenerations >= 2)) return;
+    setGenerating(true); setError(""); setSlowNotice(false);
+    const template = { title: "오늘의 춘천 기록", body: "오늘은 춘천에서 나만의 시간을 보냈습니다. 활동을 따라 천천히 걸으며 평소에는 지나치던 풍경과 이야기를 새롭게 만났습니다. 작은 선택 하나가 하루를 조금 더 풍성하게 만들었고, 다음에는 오늘의 경험을 바탕으로 또 다른 코스를 찾아보고 싶습니다.", tags: ["춘천", "오늘", "기록"] };
+    try {
+      const timeout = new Promise((resolve) => window.setTimeout(() => resolve({ draft: template, from_template: true }), 8000));
+      const response = await Promise.race([api.generateRecord({ quest_id: questId, action: "generate", purpose, answers: resolvedAnswers, attempt: regenerations }), timeout]);
+      setDraft(response.draft);
+      setSlowNotice(Boolean(response.from_template));
+      if (draft) setRegenerations((count) => count + 1);
+    } catch { setDraft(template); setSlowNotice(true); }
+    finally { setGenerating(false); }
+  }
+
+  async function saveRecord() {
+    if (!questId || !draft || saving) return;
+    setSaving(true); setError("");
+    try {
+      const response = await api.saveRecord({ quest_id: questId, action: "save", purpose, answers: resolvedAnswers, final: draft });
+      localStorage.removeItem("active_quest_id");
+      setSaveResult(response);
+      const completedRecord = { record_id: response.record_id, title: draft.title, tags: draft.tags, created_at: `${DEMO_DATE}T14:00:00`, verified: response.verified, body: draft.body };
+      await loadArchive();
+      setRecords((current) => [completedRecord, ...current.filter((record) => record.record_id !== completedRecord.record_id)]);
+      setMode("archive");
+    } catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
+    finally { setSaving(false); }
+  }
+
+  async function deleteAll() {
+    const sessionId = localStorage.getItem("session_id");
+    if (!sessionId) { navigate("/"); return; }
+    try {
+      await api.deleteSession(sessionId);
+      localStorage.removeItem("session_id");
+      localStorage.removeItem("active_quest_id");
+      navigate("/");
+    } catch { setError("잠시 문제가 있었어요. 다시 시도해 주세요"); setDeleteOpen(false); }
+  }
+
+  if (selectedRecord) return <main className="app-shell record-page"><section className="record-content readonly-record"><header className="record-head"><button onClick={() => setSelectedRecord(null)}>‹</button><h1>나의 기록</h1><strong>{balance.toLocaleString()}P</strong></header><p className="record-date">{selectedRecord.created_at.slice(0, 10).replaceAll("-", ".")}</p><h2>{selectedRecord.title}</h2><div className="record-tags">{selectedRecord.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>{!selectedRecord.verified && <span className="unverified-badge">인증 없음</span>}<article>{selectedRecord.body ?? "이 기록의 본문은 생성 당시 읽기 전용으로 보관됩니다."}</article></section><BottomNav active="archive" /></main>;
+
+  if (mode === "archive") return <main className="app-shell record-page"><section className="record-content archive-content"><header className="record-head"><button onClick={() => navigate(-1)}>‹</button><h1>보관함</h1><strong>{balance.toLocaleString()}P</strong></header><p className="archive-lead">오늘의 경험을 차곡차곡 모아 보세요.</p>{titles.map((title) => <span className="archive-title" key={title}>✦ {title}</span>)}{saveResult && <p className="record-earned">{saveResult.points_added > 0 ? `기록 +${saveResult.points_added}P` : "기록을 저장했어요"}{saveResult.completion_bonus > 0 ? ` · 완주 보너스 +${saveResult.completion_bonus}P` : ""}</p>}<section className="archive-list">{records.length ? records.map((record) => <button className="archive-card" key={record.record_id} onClick={() => setSelectedRecord(record)}><small>{record.created_at.slice(0, 10).replaceAll("-", ".")}</small><b>{record.title}</b><span>{record.tags.map((tag) => `#${tag}`).join("  ")}</span>{!record.verified && <em>인증 없음</em>}</button>) : <p className="archive-empty">아직 저장한 기록이 없어요.<br />오늘의 경험을 첫 기록으로 남겨 보세요.</p>}</section>{error && <p className="form-error">{error}</p>}<button className="delete-records" type="button" onClick={() => setDeleteOpen(true)}>내 기록 전체 삭제</button></section><BottomNav active="archive" />{deleteOpen && <div className="modal-backdrop delete-modal"><section role="dialog" aria-modal="true"><h2>기록을 모두 삭제할까요?</h2><p>모든 기록·스탬프·포인트가 삭제돼요.<br />개인 식별이 불가능한 통계는 유지됩니다.</p><div><button onClick={() => setDeleteOpen(false)}>취소</button><button onClick={deleteAll}>전체 삭제</button></div></section></div>}</main>;
+
+  return <main className="app-shell record-page"><section className="record-content"><header className="record-head"><button onClick={() => navigate(-1)}>‹</button><h1>오늘을 기록해 볼까요?</h1><strong>{balance.toLocaleString()}P</strong></header><p className="record-subtitle">짧게 답해 주시면 오늘의 경험을 기록으로 정리해 드려요.</p><section className="purpose-section"><h2>이 기록을 어디에 쓸까요?</h2><div>{[["portfolio", "포트폴리오"], ["hobby", "취미 아카이브"], ["learning", "배움일지"]].map(([value, label]) => <button className={purpose === value ? "selected" : ""} key={value} onClick={() => setPurpose(value)}>{label}</button>)}</div></section><p className="privacy-hint">실명·연락처는 적지 마세요.</p>{RECORD_QUESTIONS.map((item, index) => <section className="record-question" key={item.question}><h2>{index + 1}. {item.question}</h2><div className="answer-chips">{item.chips.map((chip) => <button className={pickedChips[index] === chip ? "selected" : ""} key={chip} onClick={() => chooseChip(index, chip)}>{chip}</button>)}</div><textarea value={answers[index]} maxLength={200} placeholder="직접 적어도 좋아요 (최대 200자)" onChange={(event) => setAnswers((current) => current.map((value, answerIndex) => answerIndex === index ? event.target.value : value))} /></section>)}{!hasAnswer && <p className="answer-warning">한 가지만 골라주시면 포인트가 적립돼요 (+60점)</p>}<button className="draft-button" disabled={generating || Boolean(draft && regenerations >= 2)} onClick={generateDraft}>{generating ? "AI가 기록을 정리하고 있어요…" : draft ? `다시 생성 (${2 - regenerations}회 남음)` : "AI 초안 만들기"}</button>{slowNotice && <p className="slow-notice">연결이 느려 기본 초안을 먼저 드려요.</p>}{draft && <section className="draft-editor"><h2>AI 초안</h2><input value={draft.title} maxLength={100} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /><textarea value={draft.body} maxLength={500} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} /><div className="record-tags">{draft.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div><button className="primary-button" onClick={saveRecord} disabled={saving}>{saving ? "저장하는 중…" : "기록 저장하기"}</button></section>}{error && <p className="form-error">{error}</p>}</section><BottomNav active="quest" /></main>;
 }
 
 function RecommendHandoff() {
@@ -698,8 +797,8 @@ function RouterApp() {
     <Route path="/recommend" element={<RecommendHandoff />} />
     <Route path="/quests/:questId" element={<QuestDetail />} />
     <Route path="/verify/:questId" element={<VerifyScreen />} />
-    <Route path="/records/:questId" element={<PendingScreen title="기록을 남겨볼까요?" description="기록 화면에서 오늘의 경험을 완성해 보세요." />} />
-    <Route path="/records" element={<PendingScreen title="기록 보관함" description="저장한 코스와 기록을 준비하고 있어요." />} />
+    <Route path="/records/:questId" element={<RecordScreen />} />
+    <Route path="/records" element={<RecordScreen />} />
     <Route path="*" element={<Home />} />
   </Routes>;
 }

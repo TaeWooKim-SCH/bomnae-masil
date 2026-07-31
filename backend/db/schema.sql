@@ -44,6 +44,7 @@ CREATE TABLE activities (
 	needs_geocode BOOLEAN NOT NULL, 
 	source_url TEXT NOT NULL, 
 	poster_url TEXT, 
+	interest_tags TEXT, 
 	PRIMARY KEY (activity_id)
 );
 

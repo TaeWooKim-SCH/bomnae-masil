@@ -111,7 +111,13 @@ def normalise_chuncheon_zone_code(value: str | None) -> str:
     The suffix identifies the same 읍·면·동, so only that prefix is translated.
     """
     code = clean_text(value)
-    return f"421{code[3:]}" if code.startswith("51110") else code
+    if code.startswith("51110"):
+        code = f"421{code[3:]}"
+    # Floating-population extracts use the 8-digit 읍·면·동 representation;
+    # the boundary GeoJSON and resident population use its 10-digit form.
+    if code.startswith("42110") and len(code) == 8:
+        code = f"{code}00"
+    return code
 
 
 def write_report(report: dict[str, object]) -> None:

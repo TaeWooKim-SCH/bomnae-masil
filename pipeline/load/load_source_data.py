@@ -19,6 +19,8 @@ ACTIVITY_COLUMNS = (
     "price_unknown", "audience_text", "venue_name", "longitude", "latitude",
     "needs_geocode", "source_url", "poster_url",
 )
+INTEREST_TAGS_COLUMN = "interest_tags"
+INTERESTS = {"운동·건강", "문화·공연", "공예·만들기", "사진·미디어", "요리·먹거리", "학습·어학", "자연·나들이"}
 MERCHANT_COLUMNS = (
     "merchant_id", "source_merchant_id", "name", "category", "category_detail",
     "address", "zone_code", "zone_name", "longitude", "latitude", "inflow_status",
@@ -78,6 +80,13 @@ def _coordinates(row: dict[str, str], context: str) -> None:
         raise ValueError(f"{context}: coordinates must be WGS84")
 
 
+def _interest_tags(value: str, context: str, *, required: bool = False) -> str:
+    tags = [tag.strip() for tag in value.split(";") if tag.strip()]
+    if (required and not tags) or not set(tags).issubset(INTERESTS):
+        raise ValueError(f"{context}: invalid interest_tags")
+    return ";".join(tags)
+
+
 def _activity_rows() -> list[dict[str, str]]:
     culture = _read_rows("activities_geocoded.csv", ACTIVITY_COLUMNS)
     seeds = _read_rows(
@@ -92,7 +101,9 @@ def _activity_rows() -> list[dict[str, str]]:
         _bool(row["needs_geocode"], row["activity_id"])
         if row["needs_geocode"] != "False":
             raise ValueError(f"{row['activity_id']}: geocoded activity is still unresolved")
-        rows.append({column: row.get(column, "") for column in ACTIVITY_COLUMNS})
+        converted = {column: row.get(column, "") for column in ACTIVITY_COLUMNS}
+        converted[INTEREST_TAGS_COLUMN] = _interest_tags(row.get(INTEREST_TAGS_COLUMN, ""), row["activity_id"])
+        rows.append(converted)
         seen.add(row["activity_id"])
     for seed in seeds:
         activity_id = seed["activity_id"]
@@ -118,6 +129,7 @@ def _activity_rows() -> list[dict[str, str]]:
             "needs_geocode": "False",
             "source_url": SEED_SOURCE_URL,
             "poster_url": "",
+            INTEREST_TAGS_COLUMN: _interest_tags(seed.get(INTEREST_TAGS_COLUMN, ""), activity_id, required=True),
         }
         _coordinates(converted, activity_id)
         rows.append(converted)
@@ -125,7 +137,7 @@ def _activity_rows() -> list[dict[str, str]]:
     return rows
 
 
-def _table_rows() -> dict[str, tuple[tuple[str, ...], list[dict[str, str]]]]:
+def _table_rows(include_interest_tags: bool = False) -> dict[str, tuple[tuple[str, ...], list[dict[str, str]]]]:
     merchants = _read_rows("merchants.csv", MERCHANT_COLUMNS)
     for row in merchants:
         _coordinates(row, row["merchant_id"])
@@ -141,7 +153,7 @@ def _table_rows() -> dict[str, tuple[tuple[str, ...], list[dict[str, str]]]]:
         if len(row["month"]) == 7:
             row["month"] = f"{row['month']}-01"
     return {
-        "activities": (ACTIVITY_COLUMNS, _activity_rows()),
+        "activities": (ACTIVITY_COLUMNS + ((INTEREST_TAGS_COLUMN,) if include_interest_tags else ()), _activity_rows()),
         "merchants": (MERCHANT_COLUMNS, merchants),
         "stop_routes": (STOP_ROUTE_COLUMNS, routes),
         "floating_population": (FLOATING_POPULATION_COLUMNS, floating),
@@ -169,6 +181,15 @@ def _require_columns(cursor: object, table: str, columns: tuple[str, ...]) -> No
         raise RuntimeError(f"{table} is not ready; missing columns: {', '.join(missing)}")
 
 
+def _has_column(cursor: object, table: str, column: str) -> bool:
+    cursor.execute(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = %s AND column_name = %s)",
+        (table, column),
+    )
+    return bool(cursor.fetchone()[0])
+
+
 def load() -> dict[str, int]:
     """Atomically replace R3-2's four remaining source tables."""
     try:
@@ -176,10 +197,10 @@ def load() -> dict[str, int]:
     except ImportError as error:
         raise RuntimeError("psycopg2-binary is required; install pipeline/requirements.txt in the root .venv.") from error
 
-    tables = _table_rows()
-    expected = {table: len(rows) for table, (_, rows) in tables.items()}
     with psycopg2.connect(database_url()) as connection:
         with connection.cursor() as cursor:
+            tables = _table_rows(include_interest_tags=_has_column(cursor, "activities", INTEREST_TAGS_COLUMN))
+            expected = {table: len(rows) for table, (_, rows) in tables.items()}
             for table, (columns, rows) in tables.items():
                 _require_columns(cursor, table, columns)
                 column_list = ", ".join(columns)
