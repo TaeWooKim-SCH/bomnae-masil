@@ -56,11 +56,12 @@ def health():
     return {"ok": True, "db": db_ok, "demo_now": now_kst().isoformat(timespec="seconds")}
 
 
-from app.routers import quests, recommend, sessions  # noqa: E402 — .env 로드·미들웨어 설정 이후
+from app.routers import quests, recommend, sessions, verify  # noqa: E402 — .env 로드·미들웨어 이후
 
 api.include_router(sessions.router)
 api.include_router(recommend.router)  # POST /quests/recommend — 고정 경로가 /{quest_id}보다 먼저
 api.include_router(quests.router)
+api.include_router(verify.router)
 app.include_router(api)
 
 # 배포 확인·서버 깨우기용 별칭 — 계약 경로는 /api/health 하나다
