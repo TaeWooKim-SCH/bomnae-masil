@@ -8,9 +8,9 @@
 
 body { margin: 0; }
 
-main {
-  width: min(100% - 32px, 720px);
-  margin: 72px auto;
+.spike-page {
+  width: min(100% - 32px, 920px);
+  margin: 48px auto 80px;
 }
 
 .eyebrow {
@@ -20,7 +20,47 @@ main {
   font-weight: 700;
 }
 
-h1 { margin: 0; font-size: 32px; }
+h1 { margin: 0; font-size: clamp(28px, 8vw, 40px); }
+
+h2 { margin: 4px 0 0; font-size: 24px; }
+
+h3 { margin: 0 0 12px; font-size: 18px; }
+
+header > p:last-child { color: #64748b; line-height: 1.6; }
+
+.health-status {
+  margin-top: 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+section { margin-top: 48px; }
+
+.section-heading > p {
+  margin: 0;
+  color: #075985;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.quest-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.quest-card {
+  min-height: 190px;
+  padding: 20px;
+  border: 1px solid #dcecf4;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.quest-card p { color: #64748b; font-size: 14px; line-height: 1.5; }
+
+.quest-card strong { color: #075985; font-size: 14px; }
 
 .status { margin: 12px 0 24px; color: #64748b; }
 
@@ -30,4 +70,77 @@ h1 { margin: 0; font-size: 32px; }
   border: 1px solid #dcecf4;
   border-radius: 16px;
   box-shadow: 0 12px 30px rgba(7, 89, 133, 0.1);
+}
+
+button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: #00a3e0;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.text-button {
+  display: block;
+  margin-top: 16px;
+  padding: 0;
+  background: transparent;
+  color: #075985;
+  text-decoration: underline;
+}
+
+.qr-reader {
+  min-height: 0;
+  margin-top: 16px;
+}
+
+.qr-reader.active {
+  min-height: 280px;
+  padding: 12px;
+  border: 1px solid #dcecf4;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.scan-result {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #eaf8ff;
+  color: #075985;
+  word-break: break-all;
+}
+
+.code-fallback {
+  display: grid;
+  gap: 8px;
+  max-width: 360px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #dcecf4;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.code-fallback label { font-size: 14px; font-weight: 700; }
+
+.code-fallback input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #b8ceda;
+  border-radius: 8px;
+  font: inherit;
+  letter-spacing: 0.15em;
+}
+
+.code-fallback p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; }
+
+@media (max-width: 680px) {
+  .spike-page { margin-top: 32px; }
+  .quest-list { grid-template-columns: 1fr; }
+  .map { height: 320px; }
 }
