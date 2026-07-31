@@ -4,11 +4,114 @@
 
 create extension if not exists postgis;
 
+CREATE TABLE accessibility_scores (
+	activity_id VARCHAR NOT NULL, 
+	board_stop_id VARCHAR NOT NULL, 
+	zone_code VARCHAR, 
+	score NUMERIC NOT NULL, 
+	no_transfer BOOLEAN NOT NULL, 
+	best_route_id VARCHAR, 
+	route_no VARCHAR, 
+	alight_stop_id VARCHAR, 
+	stops_count INTEGER, 
+	ride_min INTEGER, 
+	walk_min INTEGER, 
+	duration_min INTEGER, 
+	PRIMARY KEY (activity_id, board_stop_id)
+);
+
+CREATE INDEX ix_access_activity_zone ON accessibility_scores (activity_id, zone_code);
+
+CREATE INDEX ix_access_zone ON accessibility_scores (zone_code);
+
+CREATE TABLE activities (
+	activity_id VARCHAR NOT NULL, 
+	source_event_id VARCHAR NOT NULL, 
+	name VARCHAR NOT NULL, 
+	type VARCHAR NOT NULL, 
+	status VARCHAR, 
+	genre VARCHAR, 
+	start_date DATE NOT NULL, 
+	end_date DATE NOT NULL, 
+	schedule_text TEXT, 
+	runtime_text TEXT, 
+	price_krw INTEGER, 
+	price_unknown BOOLEAN NOT NULL, 
+	audience_text TEXT, 
+	venue_name VARCHAR NOT NULL, 
+	longitude FLOAT, 
+	latitude FLOAT, 
+	needs_geocode BOOLEAN NOT NULL, 
+	source_url TEXT NOT NULL, 
+	poster_url TEXT, 
+	PRIMARY KEY (activity_id)
+);
+
 CREATE TABLE api_cache (
 	cache_key VARCHAR NOT NULL, 
 	payload JSONB NOT NULL, 
 	created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
 	PRIMARY KEY (cache_key)
+);
+
+CREATE TABLE bus_stops (
+	stop_id VARCHAR NOT NULL, 
+	source_stop_id VARCHAR NOT NULL, 
+	name VARCHAR NOT NULL, 
+	name_en VARCHAR, 
+	longitude FLOAT NOT NULL, 
+	latitude FLOAT NOT NULL, 
+	source_date DATE, 
+	PRIMARY KEY (stop_id), 
+	UNIQUE (source_stop_id)
+);
+
+CREATE TABLE dashboard_geo (
+	name VARCHAR NOT NULL, 
+	geojson JSONB NOT NULL, 
+	created_at TIMESTAMP WITHOUT TIME ZONE, 
+	PRIMARY KEY (name)
+);
+
+CREATE TABLE floating_population (
+	zone_code VARCHAR NOT NULL, 
+	zone_name VARCHAR NOT NULL, 
+	month DATE NOT NULL, 
+	daily_average_floating_population INTEGER NOT NULL, 
+	PRIMARY KEY (zone_code, month)
+);
+
+CREATE TABLE merchants (
+	merchant_id VARCHAR NOT NULL, 
+	source_merchant_id VARCHAR NOT NULL, 
+	name VARCHAR NOT NULL, 
+	category VARCHAR NOT NULL, 
+	category_detail VARCHAR, 
+	address TEXT, 
+	zone_code VARCHAR, 
+	zone_name VARCHAR, 
+	longitude FLOAT NOT NULL, 
+	latitude FLOAT NOT NULL, 
+	inflow_status VARCHAR NOT NULL, 
+	verify_code VARCHAR(4), 
+	PRIMARY KEY (merchant_id), 
+	UNIQUE (source_merchant_id)
+);
+
+CREATE TABLE mission_copy (
+	activity_id VARCHAR NOT NULL, 
+	merchant_id VARCHAR NOT NULL, 
+	copy TEXT NOT NULL, 
+	created_at TIMESTAMP WITHOUT TIME ZONE, 
+	PRIMARY KEY (activity_id, merchant_id)
+);
+
+CREATE TABLE resident_population (
+	zone_code VARCHAR NOT NULL, 
+	zone_name VARCHAR NOT NULL, 
+	reference_date DATE NOT NULL, 
+	resident_population INTEGER NOT NULL, 
+	PRIMARY KEY (zone_code)
 );
 
 CREATE TABLE sessions (
@@ -17,6 +120,18 @@ CREATE TABLE sessions (
 	age_confirmed BOOLEAN NOT NULL, 
 	created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
 	PRIMARY KEY (id)
+);
+
+CREATE TABLE stop_routes (
+	route_id VARCHAR NOT NULL, 
+	route_no VARCHAR NOT NULL, 
+	stop_id VARCHAR NOT NULL, 
+	sequence INTEGER NOT NULL, 
+	stop_name VARCHAR NOT NULL, 
+	longitude FLOAT NOT NULL, 
+	latitude FLOAT NOT NULL, 
+	source_date DATE, 
+	PRIMARY KEY (route_id, stop_id, sequence)
 );
 
 CREATE TABLE quests (
