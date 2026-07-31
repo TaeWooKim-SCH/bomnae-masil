@@ -1,0 +1,27 @@
+{
+  "demo_now": "2026-08-01T14:00:00+09:00",
+  "merchant_radius_m": 500,
+  "scenarios": [
+    {
+      "id": "baseline-media-culture-seoksa",
+      "interests": ["사진·미디어", "문화·공연"],
+      "zone_code": "4211065000",
+      "time": "14:00-18:00",
+      "budget_krw": 30000
+    },
+    {
+      "id": "free-outdoor-seoksa",
+      "interests": ["자연·나들이", "운동·건강"],
+      "zone_code": "4211065000",
+      "time": "15:00-18:00",
+      "budget_krw": 10000
+    },
+    {
+      "id": "alley-food-seoksa",
+      "interests": ["요리·먹거리", "사진·미디어"],
+      "zone_code": "4211065000",
+      "time": "12:00-16:00",
+      "budget_krw": 30000
+    }
+  ]
+}

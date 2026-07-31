@@ -140,3 +140,21 @@ python -m pipeline.load.load_activities
 ```powershell
 python -m pipeline.load.load_zone_reference
 ```
+
+## 데모 시나리오 데이터 검증 (#13)
+
+R4가 확정한 관심사·출발 동·시간·예산 3세트는
+`pipeline/seeds/demo_scenarios.json`에 둔다. 아래 명령은 고정된
+`demo_now`를 기준으로 날짜·예산·관심사·무환승 접근성, 활동별 500m 가게 수와
+전수 품질을 검사한다.
+
+```powershell
+.\.venv\Scripts\python.exe -m pipeline.load.validate_demo_scenarios
+```
+
+결과는 Git 제외 대상인 `pipeline/output/demo_scenario_validation.json`에 생성된다.
+시간 조건은 최단 접근성 소요 + 고정 버퍼 10분 + 활동 60분이 사용자의 시간 창에
+들어가는지로 검사한다. `schedule_text`는 자유 텍스트여서 장소의 실제 개장 시각은
+별도 경고로 남긴다. `확정저유입` 비율은 #26의 동결 판정 결과만 보고하며, 이 스크립트는
+가게 상태를 변경하지 않는다. 춘천 범위 밖 좌표는 후보에서 제외하고 품질 항목에
+별도로 남긴다.
