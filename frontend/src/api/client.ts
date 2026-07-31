@@ -18,6 +18,7 @@ import zones from "../mocks/zones.json";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
+const mockQuestStates = new Map<string, { status: string; started_at: string | null }>();
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -69,8 +70,16 @@ export const api = {
   getZones: () => request("/api/zones", {}, zones),
   getStops: (zoneCode: string) => request(`/api/stops?zone=${encodeURIComponent(zoneCode)}`, {}, stops),
   recommend: (body: unknown, relaxed = false) => request("/api/quests/recommend", { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, relaxed ? recommendRelaxed : recommend),
-  getQuest: (questId: string) => request(`/api/quests/${questId}`, { headers: sessionHeaders() }, questDetail),
-  startQuest: (questId: string, body: unknown) => request(`/api/quests/${questId}/start`, { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, questStart),
+  getQuest: async (questId: string) => {
+    const detail = await request(`/api/quests/${questId}`, { headers: sessionHeaders() }, questDetail);
+    const state = USE_MOCK ? mockQuestStates.get(questId) : undefined;
+    return state ? { ...detail, ...state } : detail;
+  },
+  startQuest: async (questId: string, body: unknown) => {
+    const started = await request(`/api/quests/${questId}/start`, { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, questStart);
+    if (USE_MOCK) mockQuestStates.set(questId, { status: started.status, started_at: started.started_at });
+    return started;
+  },
   verifyQuest: (questId: string, body: unknown, scenario: "success" | "fail" | "already" | "wrongStore" = "success") => {
     const mock = { success: verifySuccess, fail: verifyFail, already: verifyAlready, wrongStore: verifyWrongStore }[scenario];
     return request(`/api/quests/${questId}/verify`, { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, mock);

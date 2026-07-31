@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "./api/client";
 import "./styles.css";
 
@@ -25,6 +25,7 @@ const BUDGETS = [
 // 화면의 날짜 선택은 없으며, 데모 기준일을 요청에 함께 보냅니다.
 const DEMO_DATE = "2026-08-01";
 const INITIAL_TIME = { start: "14:00", end: "16:00" };
+const ROUND_TRIP_BUS_FARE = 3000;
 
 function isSessionMissing(error) {
   return error?.error?.code === "SESSION_NOT_FOUND" || !localStorage.getItem("session_id");
@@ -433,6 +434,122 @@ function RecommendationSkeleton() {
   );
 }
 
+function QuestMap({ quest, expanded, onToggleExpanded }) {
+  const mapRef = React.useRef(null);
+  const [mapStatus, setMapStatus] = React.useState("지도를 불러오는 중이에요.");
+
+  React.useEffect(() => {
+    const sdkScript = document.getElementById("kakao-map-sdk");
+    const createMap = () => {
+      if (!window.kakao?.maps || !mapRef.current) {
+        setMapStatus("지도를 불러오지 못했어요.");
+        return;
+      }
+      window.kakao.maps.load(() => {
+        if (!mapRef.current) return;
+        const { activity, mission, board_stop: boardStop, alight_stop: alightStop, path } = quest.coords;
+        const map = new window.kakao.maps.Map(mapRef.current, { center: new window.kakao.maps.LatLng(activity.lat, activity.lng), level: 5 });
+        const bounds = new window.kakao.maps.LatLngBounds();
+        const locations = [
+          { point: activity, label: "활동지", kind: "activity" },
+          ...(mission ? [{ point: mission, label: "미션 가게", kind: "mission" }] : []),
+          { point: boardStop, label: "승차 정류장", kind: "stop" },
+          { point: alightStop, label: "하차 정류장", kind: "stop" },
+        ];
+        locations.forEach(({ point, label, kind }) => {
+          const position = new window.kakao.maps.LatLng(point.lat, point.lng);
+          bounds.extend(position);
+          new window.kakao.maps.Marker({ map, position, title: label });
+          const markerLabel = document.createElement("span");
+          markerLabel.className = `map-marker-label ${kind}`;
+          markerLabel.textContent = label;
+          new window.kakao.maps.CustomOverlay({ map, position, content: markerLabel, yAnchor: 2.1 });
+        });
+        const pathPoints = path.map(([lat, lng]) => new window.kakao.maps.LatLng(lat, lng));
+        pathPoints.forEach((point) => bounds.extend(point));
+        new window.kakao.maps.Polyline({ map, path: pathPoints, strokeWeight: 5, strokeColor: "#0E87C4", strokeOpacity: .9, strokeStyle: "solid" });
+        map.setBounds(bounds, 34, 34, 34, 34);
+        setMapStatus("활동지, 미션 가게, 승하차 정류장을 표시하고 있어요.");
+      });
+    };
+    const mapError = () => setMapStatus("지도를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+    if (window.kakao?.maps) createMap();
+    else {
+      sdkScript?.addEventListener("load", createMap, { once: true });
+      sdkScript?.addEventListener("error", mapError, { once: true });
+    }
+    return () => {
+      sdkScript?.removeEventListener("load", createMap);
+      sdkScript?.removeEventListener("error", mapError);
+    };
+  }, [quest, expanded]);
+
+  return <section className={expanded ? "detail-map-wrap expanded" : "detail-map-wrap"} aria-label="퀘스트 지도"><div ref={mapRef} className="detail-map" /><button className="map-expand-button" type="button" onClick={onToggleExpanded} aria-label={expanded ? "지도 전체 화면 닫기" : "지도를 전체 화면으로 보기"}>{expanded ? "×" : "⛶"}</button><div className="map-legend" aria-hidden="true"><span className="activity">● 활동지</span>{quest.mission && <span className="mission">● 미션 가게</span>}<span className="stop">■ 승하차 정류장</span></div><p className="map-status">{mapStatus}</p></section>;
+}
+
+function QuestDetail() {
+  const { questId } = useParams();
+  const navigate = useNavigate();
+  const [quest, setQuest] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [starting, setStarting] = React.useState(false);
+  const [startConflict, setStartConflict] = React.useState(false);
+  const [mapExpanded, setMapExpanded] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    api.getQuest(questId).then((data) => { if (mounted) setQuest(data); }).catch(() => { if (mounted) setError("잠시 문제가 있었어요. 다시 시도해 주세요"); }).finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, [questId]);
+
+  async function startQuest(abandonCurrent = false) {
+    if (!quest || starting) return;
+    const currentQuestId = localStorage.getItem("active_quest_id");
+    if (!abandonCurrent && currentQuestId && currentQuestId !== quest.quest_id) {
+      setStartConflict(true);
+      return;
+    }
+    setStarting(true);
+    try {
+      const result = await api.startQuest(quest.quest_id, { abandon_current: abandonCurrent });
+      localStorage.setItem("active_quest_id", quest.quest_id);
+      setQuest((current) => ({ ...current, status: result.status, started_at: result.started_at }));
+      navigate(`/verify/${quest.quest_id}`);
+    } catch (requestError) {
+      if (requestError?.error?.code === "QUEST_IN_PROGRESS") setStartConflict(true);
+      else setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요");
+    } finally { setStarting(false); }
+  }
+
+  if (loading) return <main className="app-shell detail-loading"><p>퀘스트 정보를 불러오는 중이에요.</p></main>;
+  if (!quest) return <PendingScreen title="퀘스트를 찾지 못했어요" description={error || "잠시 후 다시 시도해 주세요."} />;
+
+  const started = quest.status === "started" || quest.status === "stamped";
+  const hasMission = Boolean(quest.mission);
+  return <main className="app-shell detail-page">
+    <QuestMap quest={quest} expanded={mapExpanded} onToggleExpanded={() => setMapExpanded((current) => !current)} />
+    <button className="detail-back" type="button" onClick={() => navigate(-1)} aria-label="추천 목록으로 돌아가기">‹</button>
+    <section className="detail-content">
+      <div className="detail-title-row"><div><p className="detail-type">{quest.activity.type}</p><h1>{quest.title}</h1></div><span className="point-badge">최대 {quest.max_points}P</span></div>
+      <p className="detail-schedule">{quest.activity.place_name} · {quest.activity.schedule_text} · {quest.activity.price_krw === 0 ? "무료" : `입장 ${formatKrw(quest.activity.price_krw)}`}</p>
+      {quest.activity.d_day !== null && <><span className="detail-dday">개강 D-{quest.activity.d_day}</span><p className="today-todo"><b>오늘 할 일</b> — 신청하기 → 장소 미리 가보기 → 근처 가게 미션</p></>}
+      <section className="detail-timeline" aria-label="퀘스트 순서">
+        <div className="timeline-item bus"><i /><div><div><h2>{quest.route.route_no}번 버스 · {quest.route.stops_count}개 정거장</h2><strong>약 {quest.route.ride_min}분</strong></div><p>{quest.activity.place_name} 인근 하차 · 환승 없음</p></div></div>
+        <div className="timeline-item activity"><i /><div><div><h2>{quest.title}</h2><strong>{quest.activity.schedule_text.replace("오늘 ", "")}</strong></div><p>{quest.activity.place_name} · {quest.activity.price_krw === 0 ? "무료" : `입장 ${formatKrw(quest.activity.price_krw)}`}</p></div></div>
+        {hasMission && <div className="timeline-item mission"><i /><div><div><h2>가게 미션 — {quest.mission.merchant_name}</h2><strong>활동 후</strong></div><p>QR/코드/영수증 인증</p></div></div>}
+      </section>
+      <section className="detail-bus-block"><strong>{quest.route.route_no}번</strong><div><b>{quest.route.route_no}번 · {quest.route.stops_count}개 정거장 · 약 {quest.route.ride_min}분</b><p>{quest.route.board_stop_name} → {quest.activity.place_name} · 환승 없음</p>{quest.route.basis_note && <small>{quest.route.basis_note}</small>}</div></section>
+      <section className="detail-card"><h2>가게 미션</h2>{hasMission ? <><h3>{quest.mission.merchant_name}</h3><p>{quest.mission.copy}</p><small>인증 방법 — QR 스캔 · 4자리 코드 · 영수증 중 하나면 돼요.</small></> : <p className="no-mission-detail">이번엔 활동만 즐겨요 — 기록으로 바로</p>}</section>
+      <section className="detail-card budget-detail"><h2>예산 합계</h2><div className="budget-row"><span>{quest.activity.name}</span><b>{quest.activity.price_krw === 0 ? "무료" : formatKrw(quest.activity.price_krw)}</b></div><div className="budget-row"><span>버스 (왕복)</span><b>{formatKrw(ROUND_TRIP_BUS_FARE)}</b></div>{hasMission && <div className="budget-row"><span>가게 미션</span><b>{formatKrw(quest.mission.expected_spend_krw)}</b></div>}<div className="budget-total"><span>합계</span><strong>약 {formatKrw(quest.budget_total_krw)} <small>(버스 왕복 포함)</small></strong></div></section>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {!started ? <button className="primary-button detail-start" type="button" onClick={() => startQuest()} disabled={starting}>{starting ? "시작하는 중..." : "퀘스트 시작"}</button> : <div className="started-actions">{hasMission && <button type="button" onClick={() => navigate(`/verify/${quest.quest_id}`)}>인증하러 가기</button>}<button type="button" onClick={() => navigate(`/records/${quest.quest_id}`)}>기록 쓰기</button></div>}
+    </section>
+    {startConflict && <div className="modal-backdrop detail-conflict"><section className="start-conflict" role="dialog" aria-modal="true" aria-labelledby="start-conflict-title"><h2 id="start-conflict-title">진행 중인 퀘스트가 있어요</h2><p>새로 시작하면 기존 퀘스트는 중단돼요.</p><div><button type="button" onClick={() => setStartConflict(false)}>돌아가기</button><button type="button" onClick={() => { setStartConflict(false); startQuest(true); }}>새 퀘스트 시작</button></div></section></div>}
+  </main>;
+}
+
 function RecommendHandoff() {
   const navigate = useNavigate();
   const { state } = useLocation();
@@ -478,7 +595,8 @@ function RouterApp() {
   return <Routes>
     <Route path="/" element={<Home />} />
     <Route path="/recommend" element={<RecommendHandoff />} />
-    <Route path="/quests/:questId" element={<PendingScreen title="진행 중인 퀘스트" description="상세 화면에서 이어서 확인할 수 있어요." />} />
+    <Route path="/quests/:questId" element={<QuestDetail />} />
+    <Route path="/verify/:questId" element={<PendingScreen title="인증을 준비하고 있어요" description="인증 화면에서 퀘스트를 확인해 주세요." />} />
     <Route path="/records/:questId" element={<PendingScreen title="기록을 남겨볼까요?" description="기록 화면에서 오늘의 경험을 완성해 보세요." />} />
     <Route path="*" element={<Home />} />
   </Routes>;
