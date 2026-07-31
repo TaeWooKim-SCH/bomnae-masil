@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { api } from "./api/client";
-import { CollectionCard, CollectionModal } from "./collection-map";
+import { CollectionCard, CollectionModal, PieceRevealModal, findDongByPoint, isCore, useCollection } from "./collection-map";
 import "./styles.css";
 
 const INTERESTS = [
@@ -600,6 +600,24 @@ function VerifyScreen() {
   const [amount, setAmount] = React.useState("");
   const [receiptName, setReceiptName] = React.useState("");
   const [result, setResult] = React.useState(null);
+  const [reveal, setReveal] = React.useState(null); // 조각 획득 연출 (#100 — 스탬프 효과 뒤)
+  const revealNextRef = React.useRef(null);
+  const { zoneMap: collectionZoneMap, features: collectionFeatures } = useCollection();
+
+  function closeResult(next) {
+    const done = () => { setResult(null); if (next) next(); };
+    if (!result || result.already) { done(); return; }
+    api.getQuest(questId).then((detail) => {
+      const activity = detail?.coords?.activity;
+      const feature = activity ? findDongByPoint(collectionFeatures, activity.lat, activity.lng) : null;
+      const code = feature?.properties?.zone_code;
+      if (feature && isCore(feature) && !collectionZoneMap.collected.includes(code)) {
+        revealNextRef.current = next ?? null;
+        setResult(null);
+        setReveal(feature);
+      } else done();
+    }).catch(done);
+  }
   const [error, setError] = React.useState("");
   const [scanning, setScanning] = React.useState(false);
 
@@ -654,7 +672,7 @@ function VerifyScreen() {
 
   const codeTap = (key) => setCode((v) => key === "del" ? v.slice(0,-1) : v.length < 4 ? v + key : v);
   const formattedAmount = amount ? Number(amount).toLocaleString("ko-KR") : "";
-  return <main className={`app-shell verify-page${result ? " is-complete" : ""}`}><section className="verify-content"><header className="verify-head"><button onClick={() => navigate(-1)}>‹</button><h1>가게 미션 인증</h1><b>40P</b></header><div className="merchant-card"><small>미션 장소</small><strong>카페 소양담 (육림고개)</strong><p>전시 보고 나와서, 필름 감성 그대로 따뜻한 한 잔 어때요?</p></div><p className="verify-done">이미 적립된 퀘스트예요 — 기록만 남기면 완주!</p><div className="verify-tabs">{[["qr","QR 스캔"],["code","4자리 코드"],["receipt","영수증"]].map(([key,label]) => <button key={key} className={method===key?"selected":""} onClick={() => { setMethod(key); setError(""); }}>{label}</button>)}</div>{method === "qr" && <div className="verify-panel qr-panel"><div className={`qr-frame${scanning ? " scanning" : ""}`}>{scanning ? <div id="verify-qr-reader" /> : <><QrMark /><p>가게의 QR 스탠드를 비춰주세요</p></>}</div>{!scanning && <button className="scan-button" onClick={() => setScanning(true)}>QR 스캔 시작</button>}<p>카메라가 안 되면 4자리 코드 탭을 이용해 주세요</p></div>}{method === "code" && <div className="verify-panel code-panel"><p>QR 스탠드 아래 적힌 4자리 숫자를 입력해 주세요</p><div className="code-boxes">{[0,1,2,3].map(i=><i key={i}>{code[i]||""}</i>)}</div><div className="keypad">{["1","2","3","4","5","6","7","8","9","","0","del"].map(k=><button key={k} disabled={!k} onClick={()=>codeTap(k)}>{k==="del"?"⌫":k}</button>)}</div></div>}{method === "receipt" && <div className="verify-panel receipt-panel"><p>협약이 안 된 가게도 괜찮아요. 영수증 사진과 금액만 있으면 미션 완료!</p><label className="receipt-upload"><b>＋</b>영수증 사진 찍기 / 올리기<input type="file" accept="image/*" onChange={(e)=>setReceiptName(e.target.files?.[0]?.name??"")} /></label><small>사진은 저장되지 않아요 — 확인 후 바로 폐기돼요</small><input className="receipt-amount" inputMode="numeric" value={formattedAmount} onChange={(e)=>setAmount(e.target.value.replace(/\D/g,""))} placeholder="결제 금액 (1,000~200,000원)" /></div>}{error && <p className="form-error">{error}</p>}<button className="primary-button verify-submit" onClick={verify}>{method==="receipt"?"소비 인증하기":"인증하고 +40P 받기"}</button><button className="text-action record-without" onClick={() => navigate(`/records/${questId}`)}>인증 없이 기록만 남길래요</button></section><BottomNav active="quest" />{result && <VerificationResultModal result={result} onRecord={() => navigate(`/records/${questId}`)} onLater={() => setResult(null)} />}</main>;
+  return <main className={`app-shell verify-page${result ? " is-complete" : ""}`}><section className="verify-content"><header className="verify-head"><button onClick={() => navigate(-1)}>‹</button><h1>가게 미션 인증</h1><b>40P</b></header><div className="merchant-card"><small>미션 장소</small><strong>카페 소양담 (육림고개)</strong><p>전시 보고 나와서, 필름 감성 그대로 따뜻한 한 잔 어때요?</p></div><p className="verify-done">이미 적립된 퀘스트예요 — 기록만 남기면 완주!</p><div className="verify-tabs">{[["qr","QR 스캔"],["code","4자리 코드"],["receipt","영수증"]].map(([key,label]) => <button key={key} className={method===key?"selected":""} onClick={() => { setMethod(key); setError(""); }}>{label}</button>)}</div>{method === "qr" && <div className="verify-panel qr-panel"><div className={`qr-frame${scanning ? " scanning" : ""}`}>{scanning ? <div id="verify-qr-reader" /> : <><QrMark /><p>가게의 QR 스탠드를 비춰주세요</p></>}</div>{!scanning && <button className="scan-button" onClick={() => setScanning(true)}>QR 스캔 시작</button>}<p>카메라가 안 되면 4자리 코드 탭을 이용해 주세요</p></div>}{method === "code" && <div className="verify-panel code-panel"><p>QR 스탠드 아래 적힌 4자리 숫자를 입력해 주세요</p><div className="code-boxes">{[0,1,2,3].map(i=><i key={i}>{code[i]||""}</i>)}</div><div className="keypad">{["1","2","3","4","5","6","7","8","9","","0","del"].map(k=><button key={k} disabled={!k} onClick={()=>codeTap(k)}>{k==="del"?"⌫":k}</button>)}</div></div>}{method === "receipt" && <div className="verify-panel receipt-panel"><p>협약이 안 된 가게도 괜찮아요. 영수증 사진과 금액만 있으면 미션 완료!</p><label className="receipt-upload"><b>＋</b>영수증 사진 찍기 / 올리기<input type="file" accept="image/*" onChange={(e)=>setReceiptName(e.target.files?.[0]?.name??"")} /></label><small>사진은 저장되지 않아요 — 확인 후 바로 폐기돼요</small><input className="receipt-amount" inputMode="numeric" value={formattedAmount} onChange={(e)=>setAmount(e.target.value.replace(/\D/g,""))} placeholder="결제 금액 (1,000~200,000원)" /></div>}{error && <p className="form-error">{error}</p>}<button className="primary-button verify-submit" onClick={verify}>{method==="receipt"?"소비 인증하기":"인증하고 +40P 받기"}</button><button className="text-action record-without" onClick={() => navigate(`/records/${questId}`)}>인증 없이 기록만 남길래요</button></section><BottomNav active="quest" />{result && <VerificationResultModal result={result} onRecord={() => closeResult(() => navigate(`/records/${questId}`))} onLater={() => closeResult()} />}{reveal && <PieceRevealModal feature={reveal} features={collectionFeatures} zoneMap={collectionZoneMap} onDone={() => { setReveal(null); const nextAction = revealNextRef.current; revealNextRef.current = null; if (nextAction) nextAction(); }} />}</main>;
 }
 
 const RECORD_QUESTIONS = [

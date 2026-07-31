@@ -282,3 +282,6 @@ h1, h2, p { margin-top: 0; }
 }
 
 @media (max-width: 360px) { .home-content { padding-right: 16px; padding-left: 16px; } .chip { padding: 0 11px; } }
+
+@keyframes pieceIn { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.piece-in { animation: pieceIn .7s cubic-bezier(.2,1.4,.4,1) both; transform-box: fill-box; transform-origin: center; }
