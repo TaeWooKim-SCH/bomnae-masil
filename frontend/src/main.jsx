@@ -29,6 +29,14 @@ const DEMO_DATE = "2026-08-01";
 const INITIAL_TIME = { start: "14:00", end: "16:00" };
 const ROUND_TRIP_BUS_FARE = 3000;
 
+// 계약 §3의 max_budget_krw는 고정 구간만 받는다(0·1만·3만·5만·null) — 직접 입력한 금액은
+// "그 예산을 담을 수 있는 가장 작은 구간"으로 올려 맞추고, 어떤 구간이 적용되는지 화면에 보여준다.
+function snapBudget(amount) {
+  if (amount === 0) return 0;
+  const bucket = BUDGETS.map((item) => item.value).find((value) => value !== null && value >= amount);
+  return bucket === undefined ? null : bucket;
+}
+
 function isSessionMissing(error) {
   return error?.error?.code === "SESSION_NOT_FOUND" || !localStorage.getItem("session_id");
 }
@@ -298,7 +306,10 @@ function Home() {
   }
 
   const durationMinutes = Number(time.end.slice(0, 2)) * 60 + Number(time.end.slice(3)) - (Number(time.start.slice(0, 2)) * 60 + Number(time.start.slice(3)));
-  const isFormComplete = interests.length > 0 && zoneCode && budgetSelected && !customBudgetMode && durationMinutes >= 60;
+  const customBudgetValue = customBudget === "" ? null : Number(customBudget);
+  const effectiveBudget = customBudgetMode ? snapBudget(customBudgetValue ?? 0) : budget;
+  const budgetReady = customBudgetMode ? customBudgetValue !== null : budgetSelected;
+  const isFormComplete = interests.length > 0 && zoneCode && budgetReady && durationMinutes >= 60;
   const budgetIndex = Math.max(0, BUDGETS.findIndex((item) => item.value === budget));
   const quickStart = location.state?.lastRequest && location.state?.lastResult
     ? { request: location.state.lastRequest, result: location.state.lastResult }
@@ -317,7 +328,7 @@ function Home() {
       interests,
       origin: { zone_code: zoneCode, stop_id: stopId || null },
       time_window: { start: `${DEMO_DATE}T${time.start}`, end: `${DEMO_DATE}T${time.end}` },
-      max_budget_krw: budget,
+      max_budget_krw: effectiveBudget,
     };
     try {
       const result = await api.recommend(request);
@@ -417,7 +428,9 @@ function Home() {
           </div>
 
           <div className="form-section">
-            <div className="section-title"><h2>예산</h2><small>{budgetSelected ? BUDGETS.find((item) => item.value === budget)?.label : ""}</small></div>
+            <div className="section-title"><h2>예산</h2><small>{customBudgetMode
+              ? (customBudgetValue === null ? "" : `${customBudgetValue.toLocaleString()}원 · ${BUDGETS.find((item) => item.value === effectiveBudget)?.label} 구간`)
+              : budgetSelected ? BUDGETS.find((item) => item.value === budget)?.label : ""}</small></div>
             <div className={customBudgetMode ? "budget-slider disabled" : "budget-slider"}>
               <input
                 aria-label="예산 구간"
@@ -441,7 +454,9 @@ function Home() {
             <button className="custom-budget-link" type="button" onClick={() => { setCustomBudgetMode((current) => !current); setCustomBudget(""); }}>
               {customBudgetMode ? "← 슬라이더로 고를게요" : "금액을 직접 입력할래요 →"}
             </button>
-            {customBudgetMode && <p className="custom-budget-notice">추천 예산 구간은 현재 무료만·1만·3만·5만·상관없음 중에서만 선택할 수 있어요.</p>}
+            {customBudgetMode && <p className="custom-budget-notice">{customBudgetValue === null
+              ? "예산을 입력하면 가장 가까운 구간으로 찾아드려요 (무료만·1만·3만·5만·상관없음)."
+              : `입력하신 ${customBudgetValue.toLocaleString()}원을 담을 수 있는 ‘${BUDGETS.find((item) => item.value === effectiveBudget)?.label}’ 구간으로 찾아드려요.`}</p>}
           </div>
 
           {location.state?.qrNotice && <p className="form-error" role="alert">가게 QR은 퀘스트를 시작한 뒤에 찍어주세요 — 아래에서 추천을 받아 시작할 수 있어요.</p>}
@@ -450,7 +465,7 @@ function Home() {
           <button className="primary-button recommend-button" type="button" disabled={!isFormComplete || recommending} onClick={submitRecommendation}>
             {recommending ? "추천을 만들고 있어요..." : "퀘스트 추천받기"}
           </button>
-          {!isFormComplete && <p className="validation-hint">{customBudgetMode ? "추천 예산 구간을 선택해 주세요." : "관심사, 출발 동네, 이용 시간, 예산을 모두 선택해 주세요."}</p>}
+          {!isFormComplete && <p className="validation-hint">{customBudgetMode && customBudgetValue === null ? "예산 금액을 입력해 주세요." : "관심사, 출발 동네, 이용 시간, 예산을 모두 선택해 주세요."}</p>}
         </section>
       </div>
       <BottomNav active="home" />
@@ -921,6 +936,12 @@ function RecordScreen() {
 function RecommendHandoff() {
   const navigate = useNavigate();
   const { state } = useLocation();
+  // 헤더 잔액·칭호는 계약 §0대로 GET /records에서 — 하드코딩 0P가 실제 포인트를 가리지 않게 한다
+  const [wallet, setWallet] = React.useState({ balance: 0, titles: [] });
+  React.useEffect(() => {
+    if (!localStorage.getItem("session_id")) return;
+    api.getRecords().then((data) => setWallet({ balance: data.balance ?? 0, titles: data.titles ?? [] })).catch(() => {});
+  }, []);
   // 홈에서 방금 넘어온 경우가 아니면(탭·새로고침·딥링크) 저장된 스냅샷을 재표시 — 재호출 없음(계약 §3)
   const snapshot = state?.result ? { request: state.request, result: state.result } : loadRecoSnapshot();
   const [loading, setLoading] = React.useState(Boolean(state?.result));
@@ -942,7 +963,7 @@ function RecommendHandoff() {
   return (
     <main className="app-shell">
       <div className="recommend-content">
-        <AppHeader balance={0} titles={[]} health={null} />
+        <AppHeader balance={wallet.balance} titles={wallet.titles} health={null} />
         <button className="back-link" type="button" onClick={() => navigate("/", { state: { lastRequest: snapshot.request, lastResult: snapshot.result } })}>‹ 조건 다시 고르기</button>
         <h1>오늘의 추천 퀘스트</h1>
         <p className="recommend-summary">선택한 시간과 출발지에서 가볍게 즐길 수 있는 코스예요.</p>
