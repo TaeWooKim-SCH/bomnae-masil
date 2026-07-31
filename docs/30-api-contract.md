@@ -36,7 +36,7 @@
 ### POST /quests/recommend
 ```json
 요청 {
-  "interests": ["사진·미디어", "문화·공연"],          // 칩 8종 enum, 1~3개
+  "interests": ["사진·미디어", "문화·공연"],          // 칩 7종 enum, 1~3개 (§3 하단 목록)
   "origin": {"zone_code": "4211056000", "stop_id": null},  // stop_id: 2단 선택에서 골랐을 때만, 아니면 null
   "time_window": {"start": "2026-08-01T14:00", "end": "2026-08-01T18:00"},  // 최소 60분, MVP는 오늘 날짜 고정(화면이 오늘로 채워 보냄)
   "max_budget_krw": 30000                            // 0(무료만) | 10000 | 30000 | 50000 | null(상관없음)
