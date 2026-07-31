@@ -12,6 +12,6 @@
 
 ## 환경 (전원 공통)
 
-- 파이썬 **3.11**(`.python-version`) + 각자 로컬 `backend/.venv` 가상환경 — 셋업 절차는 `README.md`. 가상환경·캐시는 커밋하지 않는다
-- 의존성의 진실은 `requirements.txt` 하나, 전부 정확 버전 고정(`==`) — **직접 추가·변경 금지.** 패키지가 필요하면 R2(태우)에게 이슈·단톡으로 요청하고, 파일이 바뀌면 각자 `pip install -r requirements.txt` 재실행
-- `.env`는 `.env.example`을 복사해 만들고 실제 값(DATABASE_URL·API 키)은 팀 비밀 저장소에서 받는다 — 커밋 절대 금지(공개 레포)
+- 파이썬 **3.11**(루트 `.python-version`) — 레포 루트의 `.venv` 하나를 backend·pipeline이 같이 쓴다. 셋업은 루트 README, 가상환경·캐시는 커밋하지 않는다
+- 의존성 파일은 둘: `backend/requirements.txt`(서버 런타임 — Cloudtype 배포 대상)·`pipeline/requirements.txt`(로컬 배치 전용), 둘 다 `~=` 핀. 루트 `requirements.lock.txt`가 있으면 **전원 lock으로 설치**, lock 갱신은 R2만
+- `.env`는 `backend/.env.example`을 복사해 만들고 실제 값(DATABASE_URL·API 키)은 팀 비밀 저장소에서 받는다 — 커밋 절대 금지(공개 레포)

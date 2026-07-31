@@ -160,4 +160,8 @@ class PointLedgerEntry(Base):
     reason: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
-    __table_args__ = (Index("ix_point_ledger_session_id", "session_id"),)
+    __table_args__ = (
+        Index("ix_point_ledger_session_id", "session_id"),
+        # quests 연쇄 삭제 시 FK 트리거 순차 스캔 방지 — 유일하게 인덱스 없던 FK(검수 반영)
+        Index("ix_point_ledger_quest_id", "quest_id"),
+    )

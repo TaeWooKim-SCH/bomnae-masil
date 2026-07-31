@@ -3,6 +3,7 @@
 
 사용법: cd backend && python scripts/export_schema.py
 schema.sql은 손으로 고치지 않는다 — 모델 수정 후 이 스크립트로 재생성.
+출력은 결정적이다(테이블은 의존성·이름순, 인덱스는 이름순) — 모델이 그대로면 diff 0.
 """
 import sys
 from pathlib import Path
@@ -10,7 +11,8 @@ from pathlib import Path
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from sqlalchemy import create_mock_engine  # noqa: E402
+from sqlalchemy.dialects import postgresql  # noqa: E402
+from sqlalchemy.schema import CreateIndex, CreateTable  # noqa: E402
 
 from app.models import Base  # noqa: E402
 
@@ -25,13 +27,12 @@ create extension if not exists postgis;
 
 
 def main() -> None:
+    dialect = postgresql.dialect()
     statements: list[str] = []
-
-    def executor(sql, *args, **kwargs):
-        statements.append(str(sql.compile(dialect=engine.dialect)).strip() + ";")
-
-    engine = create_mock_engine("postgresql+psycopg2://", executor)
-    Base.metadata.create_all(engine, checkfirst=False)
+    for table in Base.metadata.sorted_tables:
+        statements.append(str(CreateTable(table).compile(dialect=dialect)).strip() + ";")
+        for index in sorted(table.indexes, key=lambda i: i.name):
+            statements.append(str(CreateIndex(index).compile(dialect=dialect)).strip() + ";")
 
     out = BACKEND_ROOT / "db" / "schema.sql"
     out.parent.mkdir(exist_ok=True)
