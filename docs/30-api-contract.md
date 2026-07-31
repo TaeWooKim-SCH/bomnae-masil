@@ -38,14 +38,14 @@
 요청 {
   "interests": ["사진·미디어", "문화·공연"],          // 칩 8종 enum, 1~3개
   "origin": {"zone_code": "4211056000", "stop_id": null},  // stop_id: 2단 선택에서 골랐을 때만, 아니면 null
-  "time_window": {"start": "2026-08-01T14:00", "end": "2026-08-01T18:00"},  // 최소 60분 (#55 기각 — 창이 최종)
+  "time_window": {"start": "2026-08-01T14:00", "end": "2026-08-01T18:00"},  // 최소 60분, MVP는 오늘 날짜 고정(화면이 오늘로 채워 보냄)
   "max_budget_krw": 30000                            // 0(무료만) | 10000 | 30000 | 50000 | null(상관없음)
 }
 응답 200 {
   "recommendation_id": "rec_x1",
   "quests":  [QuestCard, QuestCard, QuestCard],      // 1~3위
   "more":    [QuestCard],                            // 4~6위 (0~3장) — "다른 추천 보기"가 이걸 표시, 소진 시 버튼 숨김
-  "relaxed": null                                    // 자동 완화 시: {"steps":["budget","interest","always_open"] 중 적용분,
+  "relaxed": null                                    // 자동 완화 시: {"steps":["budget","interest","always_open","revisit"] 중 적용분,
 }                                                    //   "message":"조건을 조금 넓혀 찾았어요"}
 오류 400 INVALID_TIME_WINDOW "이용 시간을 60분 이상으로 선택해 주세요"
 ```
@@ -70,16 +70,22 @@
   },
   "route": {
     "board_stop_name": "석사동 현진아파트", "route_no": "300",
-    "headway_min": 12, "ride_min": 25, "walk_min": 8,
+    "headway_min": 12,                                     // 배차 미확보 노선은 null → 카드 표기 "운행 정보 확인" (시연 노선 ~10개는 실값 보장)
+    "ride_min": 25, "walk_min": 8,                          // ride_min 파생 = 점수표 duration_min − walk_min − 예상 대기(headway÷2, null이면 0)
     "no_transfer": true,                                   // 항상 true (환승 조합은 추천 제외)
     "basis_note": "석사동 현진아파트 정류장 기준"              // 출발 정류장 미선택 시만, 선택했으면 null
   },
   "budget_total_krw": 20000,                               // 활동비 + 미션 단가 + 버스 왕복 3,000
   "score": {"total": 86, "breakdown": {"market": 26, "interest": 22, "access": 17, "time": 13, "budget": 8}},
-  "max_points": 100                                        // 가게 없는 퀘스트는 60
+  "max_points": 100,                                       // 가게 없는 퀘스트는 60
+  "revisit": false,                                        // 이 세션이 시작·완주했던 활동의 재추천이면 true → "다시 가기" 뱃지 (필터⑤ 해제 = 완화 4단계)
+  "refs": {"activity_id": "a_88", "board_stop_id": "stp_1041", "alight_stop_id": "stp_2210"}
+                                                           // 서버·조립 내부 참조 — 화면은 사용 금지 (상세 coords 조인 키)
 }
 ```
 - 버스 표기는 화면에서 `"300번 · 약 12분 간격 · 25분"`으로 조립 — **실시간 도착 필드는 존재하지 않는다**
+- 빈 결과 완화 4단계(계약④와 동일): ①예산 +30% → ②관심사 확대 → ③상시형 대체 → ④필터⑤(기시작·완주 활동 제외) 해제 — 이동·시간 필터는 절대 완화 금지
+- **소유 경계**: quest_id·recommendation_id 발급과 스냅샷 저장은 R2 라우터 소유 — build_quests(계약④)는 [카드 최대 6장 + relaxed]만 반환하고, 필터⑤용 exclude_activity_ids는 R2가 세션에서 조회해 전달한다
 
 ## 4. 퀘스트 진행
 

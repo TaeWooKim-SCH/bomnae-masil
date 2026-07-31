@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"zone_code":"4211056000","name":"석사동","score":72.4,"quintile":2},"geometry":{"type":"Polygon","coordinates":[[[127.735,37.855],[127.755,37.855],[127.755,37.870],[127.735,37.870],[127.735,37.855]]]}},
+{"type":"Feature","properties":{"zone_code":"4211053000","name":"조운동","score":41.1,"quintile":4},"geometry":{"type":"Polygon","coordinates":[[[127.720,37.878],[127.732,37.878],[127.732,37.888],[127.720,37.888],[127.720,37.878]]]}},
+{"type":"Feature","properties":{"zone_code":"4211031000","name":"북산면","score":18.9,"quintile":5},"geometry":{"type":"Polygon","coordinates":[[[127.850,37.950],[127.930,37.950],[127.930,38.020],[127.850,38.020],[127.850,37.950]]]}}]}
