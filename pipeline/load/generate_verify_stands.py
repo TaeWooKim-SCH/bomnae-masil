@@ -31,8 +31,18 @@ def generate() -> Path:
     if len(shops) != 5 or any(shops[row["merchant_id"]][2] != row["verify_code"] for row in seeds):
         raise RuntimeError("DB verification-code seed does not match the five demo merchants")
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    font = "Malgun"
-    pdfmetrics.registerFont(TTFont(font, r"C:\Windows\Fonts\malgun.ttf"))
+    # 한글 폰트 탐색 — Windows(맑은고딕)·macOS(나눔고딕/애플고딕) 어느 쪽에서 실행해도 동작
+    font = "KoreanStand"
+    candidates = [
+        r"C:\Windows\Fonts\malgun.ttf",
+        str(Path.home() / "Library/Fonts/NanumGothic-Bold.ttf"),
+        str(Path.home() / "Library/Fonts/NanumGothic-Regular.ttf"),
+        "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+    ]
+    font_path = next((c for c in candidates if Path(c).exists()), None)
+    if font_path is None:
+        raise SystemExit("한글 TTF 폰트를 찾지 못했습니다 — candidates 목록에 경로를 추가하세요")
+    pdfmetrics.registerFont(TTFont(font, font_path))
     document = canvas.Canvas(str(OUTPUT), pagesize=A4)
     width, height = A4
     for row in seeds:
