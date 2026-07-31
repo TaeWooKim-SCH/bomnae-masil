@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from . import activities, bus_routes, bus_stops, floating_population, local_currency_merchants, merchants, resident_population, stop_hourly
+from . import activities, always_open, bus_routes, bus_stops, floating_population, local_currency_merchants, merchants, resident_population, stop_hourly
 from .common import dataset_dir, write_report
 
 
@@ -10,6 +10,7 @@ def main() -> None:
         "bus_stops": bus_stops.run(),
         "stop_routes": bus_routes.run(),
         "activities": activities.run(),
+        "always_open_activities": always_open.run(),
         "merchants": merchants.run(),
         "local_currency_merchants": local_currency_merchants.run(),
         "floating_population": floating_population.run(),

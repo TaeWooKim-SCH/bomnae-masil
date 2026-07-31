@@ -100,7 +100,7 @@ def valid_wgs84(longitude: float | None, latitude: float | None) -> bool:
 
 def stable_id(prefix: str, value: str) -> str:
     """Make deterministic output IDs without exposing a source's formatting quirks."""
-    normalised = re.sub(r"[^0-9A-Za-z_-]+", "-", clean_text(value)).strip("-")
+    normalised = re.sub(r"[^0-9A-Za-z가-힣_-]+", "-", clean_text(value)).strip("-")
     return f"{prefix}_{normalised}" if normalised else ""
 
 
