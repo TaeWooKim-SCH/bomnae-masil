@@ -26,6 +26,7 @@ from app.core.points import (
     balance_of,
     titles_of,
 )
+from app.core.zone_map import compute_zone_map, zone_titles
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import Quest, Record, Stamp
@@ -207,6 +208,7 @@ def list_records(current=Depends(get_current_session), db=Depends(get_db)):
         select(Record).where(Record.session_id == current.id).order_by(Record.created_at.desc())
     ).all()
     balance = balance_of(db, current.id)
+    zone_map = compute_zone_map(db, current.id)  # 조각지도(#99) — 계약 §5 승인 추가 필드
     return {
         "records": [
             {
@@ -220,5 +222,6 @@ def list_records(current=Depends(get_current_session), db=Depends(get_db)):
             for r in rows
         ],
         "balance": balance,
-        "titles": titles_of(balance),
+        "titles": titles_of(balance) + zone_titles(zone_map),  # 포인트 칭호 + 수집 칭호 합류
+        "zone_map": zone_map,
     }

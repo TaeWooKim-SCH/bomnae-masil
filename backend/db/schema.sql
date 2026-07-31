@@ -45,6 +45,7 @@ CREATE TABLE activities (
 	source_url TEXT NOT NULL, 
 	poster_url TEXT, 
 	interest_tags TEXT, 
+	zone_code VARCHAR, 
 	PRIMARY KEY (activity_id)
 );
 
