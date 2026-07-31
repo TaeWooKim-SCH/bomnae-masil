@@ -1,0 +1,4 @@
+# R2-01(#4): 스키마·검증 최소 의존성 — 서버 프레임워크(fastapi·uvicorn 등)는 스켈레톤(#5)에서 추가
+SQLAlchemy>=2.0,<3
+psycopg2-binary>=2.9
+python-dotenv>=1.0
