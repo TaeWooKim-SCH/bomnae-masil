@@ -11,7 +11,7 @@ import io
 import os
 from pathlib import Path
 
-from .common import output_dir, valid_wgs84
+from .common import in_chuncheon_bounds, output_dir, valid_wgs84
 
 ACTIVITY_COLUMNS = (
     "activity_id", "source_event_id", "name", "type", "status", "genre",
@@ -107,6 +107,8 @@ def _activity_rows() -> list[dict[str, str]]:
     seen: set[str] = set()
     for row in culture:
         _coordinates(row, row["activity_id"])
+        if not in_chuncheon_bounds(float(row["longitude"]), float(row["latitude"])):
+            continue
         _bool(row["price_unknown"], row["activity_id"])
         _bool(row["needs_geocode"], row["activity_id"])
         if row["needs_geocode"] != "False":

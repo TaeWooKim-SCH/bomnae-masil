@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from .common import clean_text, output_dir, read_csv, valid_wgs84, write_csv
+from .common import clean_text, in_chuncheon_bounds, output_dir, read_csv, valid_wgs84, write_csv
 
 INPUT_NAME = "activities.csv"
 CACHE_NAME = "activity_geocode_cache.csv"
@@ -96,6 +96,10 @@ def run(input_path: Path, cache_path: Path, api_key: str) -> dict[str, int]:
             cache_rows.append({"venue_name": venue, "longitude": "", "latitude": "", "status": "not_found"})
             continue
         longitude, latitude = coordinate
+        if not in_chuncheon_bounds(longitude, latitude):
+            failed += 1
+            cache_rows.append({"venue_name": venue, "longitude": longitude, "latitude": latitude, "status": "outside_chuncheon"})
+            continue
         cache[venue] = coordinate
         resolved += 1
         cache_rows.append({"venue_name": venue, "longitude": longitude, "latitude": latitude, "status": "ok"})
