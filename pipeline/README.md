@@ -53,6 +53,21 @@ python -m pipeline.load.load_source_data
 유동인구의 월 단위 값은 DB의 `date` 계약에 맞춰 해당 월의 1일(`YYYY-MM-01`)로
 저장한다. 가게의 `verify_code`는 이 배치에서 건드리지 않는다.
 
+## 대시보드 GeoJSON 계약 (#12)
+
+R1의 지도 목 파일인 `design/samples/accessibility.sample.geojson`와
+`design/samples/inflow.sample.geojson`가 동결된 API 계약의 샘플이다. 접근성은
+`Polygon|MultiPolygon`과 `zone_code`·`name`·`score(0~100)`·`quintile(1~5)`, 저유입
+상권은 `Point`와 `name`·`category`·고정 4종 `inflow_status`를 사용한다. 좌표 순서는
+항상 WGS84 `[longitude, latitude]`다.
+
+```powershell
+python -m pipeline.load.dashboard_geo
+```
+
+명령은 두 샘플의 FeatureCollection 형식과 위 속성·좌표 범위를 검증한다. 실제
+`dashboard_geo` 배치는 같은 스키마를 사용하며, R1의 카카오맵 렌더링 승인 후 동결한다.
+
 ## 접근성 점수표 (#10)
 
 활동 좌표 보강 후 아래 배치를 실행하면 정류장×활동지 조합의 단일 경로 원천인
