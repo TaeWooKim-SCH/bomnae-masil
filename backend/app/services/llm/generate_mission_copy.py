@@ -6,6 +6,8 @@
 """
 
 import argparse
+import os
+import unicodedata
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -56,6 +58,129 @@ class MissionCopyStore(Protocol):
         """새 문구를 영속 저장한다."""
 
 
+class DatabaseCursor(Protocol):
+    def __enter__(self) -> "DatabaseCursor": ...
+
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None: ...
+
+    def execute(self, query: str, params: tuple[object, ...] | None = None) -> None: ...
+
+    def fetchone(self) -> tuple[bool] | None: ...
+
+    def fetchall(self) -> list[tuple[str, str, str, str, str]]: ...
+
+
+class DatabaseConnection(Protocol):
+    def cursor(self) -> DatabaseCursor: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+    def close(self) -> None: ...
+
+
+def connect_database(database_url: str) -> DatabaseConnection:
+    """Open a PostgreSQL connection only for real batch execution."""
+
+    import psycopg2
+
+    return psycopg2.connect(database_url, connect_timeout=10)
+
+
+class PostgresMissionCopyStore:
+    """실제 mission_copy 테이블용, 조합 키 기준 멱등 저장소."""
+
+    def __init__(self, connection: DatabaseConnection) -> None:
+        self.connection = connection
+
+    def has_pair(self, key: PairKey) -> bool:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM mission_copy
+                    WHERE activity_id = %s AND merchant_id = %s
+                )
+                """,
+                key,
+            )
+            row = cursor.fetchone()
+        return bool(row and row[0])
+
+    def save(self, mission_copy: MissionCopy) -> None:
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO mission_copy (activity_id, merchant_id, copy)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (activity_id, merchant_id) DO NOTHING
+                """,
+                (
+                    mission_copy.activity_id,
+                    mission_copy.merchant_id,
+                    mission_copy.copy,
+                ),
+            )
+
+
+def load_nearby_activity_merchant_pairs(
+    connection: DatabaseConnection,
+    *,
+    limit_per_activity: int = 10,
+    total_limit: int = 20,
+) -> list[ActivityMerchantPair]:
+    """활동별 반경 500m~1km 내 최근접 가게 후보를 제한 수만큼 읽는다."""
+
+    if limit_per_activity < 1 or total_limit < 1:
+        raise ValueError("candidate limits must be positive")
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            WITH distances AS (
+                SELECT
+                    a.activity_id,
+                    a.name AS activity_name,
+                    m.merchant_id,
+                    m.name AS merchant_name,
+                    m.category AS merchant_category,
+                    6371000 * acos(least(1.0, greatest(-1.0,
+                        cos(radians(a.latitude)) * cos(radians(m.latitude)) *
+                        cos(radians(m.longitude) - radians(a.longitude)) +
+                        sin(radians(a.latitude)) * sin(radians(m.latitude))
+                    ))) AS distance_m
+                FROM activities AS a
+                CROSS JOIN merchants AS m
+                WHERE a.latitude IS NOT NULL
+                  AND a.longitude IS NOT NULL
+            ),
+            nearby AS (
+                SELECT *
+                FROM distances
+                WHERE distance_m BETWEEN %s AND %s
+            ),
+            ranked AS (
+                SELECT *, row_number() OVER (
+                    PARTITION BY activity_id
+                    ORDER BY distance_m, merchant_id
+                ) AS candidate_rank
+                FROM nearby
+            )
+            SELECT activity_id, activity_name, merchant_id, merchant_name, merchant_category
+            FROM ranked
+            WHERE candidate_rank <= %s
+            ORDER BY random()
+            LIMIT %s
+            """,
+            (500, 1000, limit_per_activity, total_limit),
+        )
+        rows = cursor.fetchall()
+
+    return [ActivityMerchantPair(*row) for row in rows]
+
+
 @dataclass
 class InMemoryMissionCopyStore:
     """실DB 테이블 준비 전 테스트·드라이런용 저장소."""
@@ -83,7 +208,9 @@ def build_mission_prompt(pair: ActivityMerchantPair) -> str:
         "반드시 활동명과 가게명을 각각 그대로 한 번씩 포함하고, 활동을 먼저 한 뒤 가게를 방문하는 "
         "순서로 자연스럽게 제안해. 사실로 사용할 수 있는 정보는 활동명·가게명·업종뿐이야. "
         "입력에 없는 위치·상품·역사·관계·운영정보·이벤트·할인·혜택을 만들지 말고, "
-        "과장하거나 구매를 강요하지 마."
+        "과장하거나 구매를 강요하지 마. "
+        "활동명·가게명·업종 외의 사실을 절대 덧붙이지 마. "
+        "활동을 마친 뒤 가게에 들러 오늘의 경험을 한 줄로 기록하는 일반적인 제안만 작성해."
     )
 
 
@@ -102,10 +229,22 @@ def is_plain_mission_copy(copy: str) -> bool:
 def is_usable_mission_copy(pair: ActivityMerchantPair, copy: str) -> bool:
     """카드 문구에는 활동·가게 식별을 위한 두 이름이 모두 있어야 한다."""
 
+    normalized_copy = unicodedata.normalize("NFKC", copy)
+    normalized_activity_name = unicodedata.normalize("NFKC", pair.activity_name)
+    normalized_merchant_name = unicodedata.normalize("NFKC", pair.merchant_name)
     return (
         is_plain_mission_copy(copy)
-        and pair.activity_name in copy
-        and pair.merchant_name in copy
+        and normalized_activity_name in normalized_copy
+        and normalized_merchant_name in normalized_copy
+    )
+
+
+def build_exact_name_fallback(pair: ActivityMerchantPair) -> str:
+    """모델이 원본 이름을 바꾼 경우에만 사용하는 안전한 한 문장 문구."""
+
+    return (
+        f"{pair.activity_name} 활동을 마친 뒤 {pair.merchant_name}에 들러 "
+        "오늘의 경험을 한 줄로 기록해보세요."
     )
 
 
@@ -132,9 +271,12 @@ def generate_missing_mission_copies(
             continue
 
         copy = (generated or "").strip()
-        if not copy or not is_usable_mission_copy(pair, copy):
+        if not copy or not is_plain_mission_copy(copy):
             failed_count += 1
             continue
+
+        if not is_usable_mission_copy(pair, copy):
+            copy = build_exact_name_fallback(pair)
 
         store.save(
             MissionCopy(
@@ -179,6 +321,34 @@ def run_demo_dry_run(
     return result, tuple(store.saved_copies)
 
 
+def run_real_batch(
+    *,
+    limit: int,
+    generator: Generator = generate_mission_copy_text,
+) -> BatchResult:
+    """Generate and store a limited number of real database pairs."""
+
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is required for real mode")
+
+    connection = connect_database(database_url)
+    try:
+        pairs = load_nearby_activity_merchant_pairs(
+            connection, limit_per_activity=10, total_limit=limit
+        )
+        result = generate_missing_mission_copies(
+            pairs, PostgresMissionCopyStore(connection), generator
+        )
+        connection.commit()
+        return result
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
 def main(
     argv: list[str] | None = None,
     generator: Generator = generate_mission_copy_text,
@@ -191,9 +361,36 @@ def main(
         action="store_true",
         help="가짜 활동·가게 10개 조합을 메모리에서 생성합니다.",
     )
+    parser.add_argument(
+        "--real",
+        action="store_true",
+        help="실제 DB의 활동·가게 조합을 mission_copy에 저장합니다.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="실데이터 모드의 최대 처리 조합 수입니다. 기본값은 20입니다.",
+    )
     args = parser.parse_args(argv)
-    if not args.demo:
-        parser.error("실데이터 테이블 준비 전에는 --demo로만 실행할 수 있습니다.")
+    if args.demo == args.real:
+        parser.error("--demo 또는 --real 중 하나를 선택해야 합니다.")
+    if args.limit < 1:
+        parser.error("--limit은 1 이상이어야 합니다.")
+
+    if args.real:
+        try:
+            result = run_real_batch(limit=args.limit, generator=generator)
+        except Exception:
+            print("SUMMARY mode=real created=0 skipped=0 failed=1")
+            return 1
+        print(
+            "SUMMARY mode=real "
+            f"created={result.created_count} "
+            f"skipped={result.skipped_count} "
+            f"failed={result.failed_count}"
+        )
+        return 0 if result.failed_count == 0 else 1
 
     result, copies = run_demo_dry_run(generator)
     print(
