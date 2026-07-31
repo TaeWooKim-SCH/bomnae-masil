@@ -1,0 +1,18 @@
+match_type,match_value,interest_tags,note
+genre,공연,문화·공연,공연 기본 분류
+genre,전시,문화·공연;사진·미디어,전시 관람과 시각예술
+genre,행사,문화·공연,행사 기본 분류
+title_contains,K-POP,운동·건강;문화·공연,댄스 커버 경연
+title_contains,댄스,운동·건강;문화·공연,댄스 활동
+title_contains,체험,공예·만들기,체험형 만들기
+title_contains,만들기,공예·만들기,제작 프로그램
+title_contains,자수,공예·만들기,공예 프로그램
+title_contains,베이킹,요리·먹거리,요리 프로그램
+title_contains,책빵,요리·먹거리,요리 프로그램
+title_contains,디카시,사진·미디어,디지털 시각·문자 콘텐츠
+title_contains,시사만화,사진·미디어,시각예술 전시
+title_contains,도시콘텐츠,사진·미디어,콘텐츠 제작
+title_contains,스트리트리포터,사진·미디어,콘텐츠 제작
+title_contains,출판,사진·미디어,콘텐츠 제작
+title_contains,아카데미,학습·어학,학습 프로그램
+title_contains,수강생,학습·어학,학습 프로그램

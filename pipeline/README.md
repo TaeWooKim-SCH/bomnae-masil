@@ -38,3 +38,14 @@ python -m pipeline.load.geocode_activities
 성공 행은 `pipeline/output/activities_geocoded.csv`에 WGS84 좌표와 함께 생성된다.
 주소를 찾지 못했거나 유효하지 않은 좌표는 적재 대상에서 제외되며,
 `activity_geocode_cache.csv`에서 확인할 수 있다.
+
+## 관심사 칩·행정동 정규화 (#48)
+
+`pipeline/seeds/activity_interest_mapping.csv`는 활동 분류·제목 키워드를 API 계약의
+고정 7종 칩으로 연결한다. `run_all`은 문화행사에 `interest_tags`를 부여하며, 상시형
+씨드는 원본의 같은 컬럼을 검증해 그대로 사용한다. 어느 규칙에도 맞지 않는 활동은
+태그를 비워 관심사 점수에서 중간값(기타)으로 처리한다. 새 칩을 만들지 않는다.
+
+행정동 경계와 접근성 점수표는 `42110…` 코드를 기준으로 한다. 인구·유동인구 원본의
+이전 춘천 코드 `51110…`은 같은 읍·면·동 접미사를 보존한 채 `42110…`으로 정규화해
+`GET /zones`의 이름·인구 조인이 일치하도록 한다.

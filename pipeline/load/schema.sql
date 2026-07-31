@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS stop_routes (
 CREATE TABLE IF NOT EXISTS activities (
     activity_id text PRIMARY KEY, source_event_id text NOT NULL, name text NOT NULL, type text NOT NULL,
     status text, genre text, start_date date NOT NULL, end_date date NOT NULL, schedule_text text,
-    runtime_text text, price_krw integer, price_unknown boolean NOT NULL, audience_text text,
+    runtime_text text, price_krw integer, price_unknown boolean NOT NULL, interest_tags text, audience_text text,
     venue_name text NOT NULL, longitude double precision, latitude double precision,
     needs_geocode boolean NOT NULL, source_url text NOT NULL, poster_url text
 );

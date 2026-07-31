@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .common import clean_text, read_csv, require_columns, source_path, write_csv
+from .common import clean_text, normalise_chuncheon_zone_code, read_csv, require_columns, source_path, write_csv
 
 SOURCE = "춘천 25개동 월별 유동인구.csv"
 MONTH = re.compile(r"^(\d{2})\.(\d{2})$")
@@ -16,7 +16,7 @@ def run() -> dict[str, int]:
     dropped = 0
     for row in rows:
         match = MONTH.match(clean_text(row.get("month")))
-        code, name = clean_text(row.get("dong_code")), clean_text(row.get("dong_name"))
+        code, name = normalise_chuncheon_zone_code(row.get("dong_code")), clean_text(row.get("dong_name"))
         try:
             population = int(float(clean_text(row.get("daily_average_floating_population"))))
         except ValueError:

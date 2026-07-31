@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .common import clean_text, read_csv, require_columns, source_path, write_csv
+from .common import clean_text, normalise_chuncheon_zone_code, read_csv, require_columns, source_path, write_csv
 
 SOURCE = "행정안전부_지역별(행정동) 성별 연령별 주민등록 인구수_20260630.csv"
 
@@ -14,7 +14,7 @@ def run() -> dict[str, int]:
     for row in rows:
         if clean_text(row.get("시군구명")) != "춘천시":
             continue
-        code, name = clean_text(row.get("행정기관코드")), clean_text(row.get("읍면동명"))
+        code, name = normalise_chuncheon_zone_code(row.get("행정기관코드")), clean_text(row.get("읍면동명"))
         try:
             total = int(clean_text(row.get("계")).replace(",", ""))
         except ValueError:
