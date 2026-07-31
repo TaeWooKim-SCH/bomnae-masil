@@ -24,7 +24,10 @@ def run() -> dict[str, int]:
         if not match or not code or not name or population < 0:
             dropped += 1
             continue
-        month = f"20{match.group(1)}-{match.group(2)}"
+        # The database contract uses a date, while the source represents a
+        # calendar month.  Store its deterministic first day rather than a
+        # synthetic current timestamp.
+        month = f"20{match.group(1)}-{match.group(2)}-01"
         key = (code, month)
         if key in seen:
             dropped += 1

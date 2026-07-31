@@ -39,6 +39,20 @@ python -m pipeline.load.geocode_activities
 주소를 찾지 못했거나 유효하지 않은 좌표는 적재 대상에서 제외되며,
 `activity_geocode_cache.csv`에서 확인할 수 있다.
 
+## R3-2 원천 테이블 적재 (#9)
+
+아래 명령은 좌표가 보강된 문화행사와 상시형 씨드를 합쳐 `activities`에 넣고,
+정제된 상가·정류장 노선·행정동 월별 유동인구를 각각 `merchants`·`stop_routes`·
+`floating_population`에 적재한다. CSV 헤더, WGS84 좌표, 가게 유입 상태 enum,
+정류장 참조를 먼저 검사하며 네 테이블은 한 트랜잭션으로 교체된다.
+
+```powershell
+python -m pipeline.load.load_source_data
+```
+
+유동인구의 월 단위 값은 DB의 `date` 계약에 맞춰 해당 월의 1일(`YYYY-MM-01`)로
+저장한다. 가게의 `verify_code`는 이 배치에서 건드리지 않는다.
+
 ## 접근성 점수표 (#10)
 
 활동 좌표 보강 후 아래 배치를 실행하면 정류장×활동지 조합의 단일 경로 원천인
