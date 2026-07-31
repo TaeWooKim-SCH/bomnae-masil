@@ -293,3 +293,16 @@ h1, h2, p { margin-top: 0; }
 .quest-started-banner { margin: 0 0 14px; padding: 13px 15px; border: 1px solid #cde6da; border-left: 4px solid #2d9272; border-radius: 12px; background: #f4fbf8; }
 .quest-started-banner strong { display: block; color: #176b54; font-size: 13.5px; font-weight: 800; }
 .quest-started-banner p { margin: 5px 0 0; color: #35564c; font-size: 12.5px; line-height: 1.55; }
+
+.quest-mini-bar { position:fixed; z-index:21; bottom:80px; left:50%; display:flex; width:min(100%,430px); align-items:center; gap:10px; padding:10px 15px calc(10px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); border:0; border-top:1px solid #d7e7f0; background:#eef7fc; text-align:left; }
+.quest-mini-bar .mini-dot { flex:none; width:8px; height:8px; border-radius:50%; background:#0e87c4; box-shadow:0 0 0 4px rgba(14,135,196,.16); }
+.quest-mini-bar .mini-text { flex:1; min-width:0; }
+.quest-mini-bar strong { display:block; overflow:hidden; color:#0b3a52; font-size:12.5px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+.quest-mini-bar small { display:block; margin-top:2px; overflow:hidden; color:#5e6b72; font-size:11px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.quest-mini-bar .mini-arrow { flex:none; color:#0e87c4; font-size:17px; font-weight:800; }
+
+/* 미니 바가 떠 있는 동안에는 스크롤 끝 콘텐츠가 가리지 않도록 여백을 더한다 */
+body:has(.quest-mini-bar) .home-content,
+body:has(.quest-mini-bar) .recommend-content,
+body:has(.quest-mini-bar) .pending-screen { padding-bottom: 150px; }
+body:has(.quest-mini-bar) .record-content { padding-bottom: 170px; }
