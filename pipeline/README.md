@@ -23,3 +23,18 @@ python -m load.run_all
 출력의 `quality_report.json`에서 원본/출력/제외 행 수를 확인한다. 반복 실행은
 같은 출력 파일을 재생성하므로 멱등이다. Supabase 적용 전에는
 `pipeline/load/schema.sql` 초안을 R2에게 검토받는다.
+
+## 활동 장소 좌표 보강 (#46)
+
+`run_all`은 오프라인 정제만 수행한다. 활동 장소 좌표는 팀 비밀 저장소에서 받은
+`KAKAO_REST_API_KEY`를 **로컬 환경변수로만** 넣은 뒤 별도 실행한다. 키와 지오코딩
+캐시는 Git에 올리지 않는다.
+
+```powershell
+$env:KAKAO_REST_API_KEY = "팀 비밀 저장소의 값"
+python -m pipeline.load.geocode_activities
+```
+
+성공 행은 `pipeline/output/activities_geocoded.csv`에 WGS84 좌표와 함께 생성된다.
+주소를 찾지 못했거나 유효하지 않은 좌표는 적재 대상에서 제외되며,
+`activity_geocode_cache.csv`에서 확인할 수 있다.
