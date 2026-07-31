@@ -12,10 +12,15 @@ const NAVY = "#0B3A52";
 const SUB = "#5E6B72";
 const FAINT = "#93A0A8";
 
-// 도심 수집판 14개 동 (design/prototype.html v4 확정 — 외곽 읍·면·신사우동은 '준비 중')
-const CORE_DONGS = ["교동", "근화동", "소양동", "약사명동", "조운동", "효자1동", "효자2동", "효자3동", "후평1동", "후평2동", "후평3동", "석사동", "퇴계동", "강남동"];
+// 수집 대상 = 서버 zone_map.available(활동이 1건 이상 있는 동, 계약 §5). 아래 목록은
+// available이 아직 안 왔을 때(로딩·비로그인)만 쓰는 표시용 폴백이다 — 판정의 진실은 서버다.
+const FALLBACK_DONGS = ["교동", "근화동", "소양동", "약사명동", "조운동", "효자1동", "석사동", "퇴계동", "강남동"];
 const dongName = (f) => (f.properties?.name ?? "").split(" ").pop();
-export const isCore = (f) => CORE_DONGS.includes(dongName(f));
+export const isCore = (f, zoneMap) => {
+  const available = zoneMap?.available ?? [];
+  if (available.length) return available.includes(f.properties?.zone_code);
+  return FALLBACK_DONGS.includes(dongName(f));
+};
 
 const MILESTONES = [
   { at: 5, label: "동네 수집가" },
@@ -82,7 +87,7 @@ function makeProjector(featureList, w = 360, h = 300, pad = 10) {
 function stateOf(feature, zoneMap) {
   const code = feature.properties?.zone_code;
   if (zoneMap.collected.includes(code)) return "filled";
-  return isCore(feature) ? "open" : "locked";
+  return isCore(feature, zoneMap) ? "open" : "locked";
 }
 
 const PIECE_STYLE = {
@@ -136,9 +141,9 @@ function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLab
 }
 
 function coreProgress(zoneMap, features) {
-  const coreCodes = features.filter(isCore).map((f) => f.properties?.zone_code);
+  const coreCodes = features.filter((f) => isCore(f, zoneMap)).map((f) => f.properties?.zone_code);
   const n = zoneMap.collected.filter((c) => coreCodes.includes(c)).length;
-  return { n, m: coreCodes.length || CORE_DONGS.length };
+  return { n, m: coreCodes.length || zoneMap.available.length };
 }
 
 export function CollectionCard({ onOpen }) {
@@ -169,7 +174,7 @@ export function CollectionModal({ onClose }) {
   const [notice, setNotice] = React.useState("");
   const { n, m } = coreProgress(zoneMap, features);
   const complete = m > 0 && n >= m;
-  const coreFeatures = features.filter(isCore);
+  const coreFeatures = features.filter((f) => isCore(f, zoneMap));
   const lockedTap = () => {
     setNotice("아직 준비 중인 동네예요");
     window.setTimeout(() => setNotice(""), 1800);
@@ -269,7 +274,7 @@ export function PieceRevealModal({ feature, features, zoneMap, onDone }) {
   const { n, m } = coreProgress(zoneMap, features);
   const code = feature.properties?.zone_code;
   const already = zoneMap.collected.includes(code);
-  const count = Math.min(m, n + (already || !isCore(feature) ? 0 : 1));
+  const count = Math.min(m, n + (already || !isCore(feature, zoneMap) ? 0 : 1));
   const projector = makeProjector(features);
   return (
     <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", width: "min(100%, 430px)", transform: "translateX(-50%)", background: "rgba(10,26,36,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 58, backdropFilter: "blur(3px)" }}>
