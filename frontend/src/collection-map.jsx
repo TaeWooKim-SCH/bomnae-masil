@@ -39,20 +39,22 @@ export function useCollection() {
   return { zoneMap, features };
 }
 
-function ringPoints(geometry) {
+function allRings(geometry) {
   if (!geometry) return [];
-  if (geometry.type === "Polygon") return geometry.coordinates[0] ?? [];
-  if (geometry.type === "MultiPolygon") {
-    let best = [];
-    for (const poly of geometry.coordinates) if ((poly[0] ?? []).length > best.length) best = poly[0];
-    return best;
-  }
+  if (geometry.type === "Polygon") return geometry.coordinates;
+  if (geometry.type === "MultiPolygon") return geometry.coordinates.flat();
   return [];
+}
+
+function ringPoints(geometry) {
+  let best = [];
+  for (const r of allRings(geometry)) if (r.length > best.length) best = r;
+  return best;
 }
 
 function makeProjector(featureList, w = 360, h = 300, pad = 10) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const f of featureList) for (const [x, y] of ringPoints(f.geometry)) {
+  for (const f of featureList) for (const ring of allRings(f.geometry)) for (const [x, y] of ring) {
     if (x < minX) minX = x; if (x > maxX) maxX = x;
     if (y < minY) minY = y; if (y > maxY) maxY = y;
   }
@@ -62,8 +64,12 @@ function makeProjector(featureList, w = 360, h = 300, pad = 10) {
   const px = ([x, y]) => [ox + (x - minX) * scale, h - (oy + (y - minY) * scale)];
   return {
     path(feature) {
-      const pts = ringPoints(feature.geometry).map(px);
-      return pts.length ? `M${pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join("L")}Z` : "";
+      return allRings(feature.geometry)
+        .map((ring) => {
+          const pts = ring.map(px);
+          return pts.length ? `M${pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join("L")}Z` : "";
+        })
+        .join("");
     },
     centroid(feature) {
       const pts = ringPoints(feature.geometry).map(px);
@@ -102,7 +108,7 @@ function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLab
         {featureList.map((f) => {
           const s = PIECE_STYLE[stateOf(f, zoneMap)];
           return (
-            <path key={f.properties?.zone_code} d={projector.path(f)} fill={s.fill} stroke={s.stroke} strokeWidth="1.2" strokeDasharray={s.dash} onClick={stateOf(f, zoneMap) === "locked" ? onLockedTap : undefined} style={stateOf(f, zoneMap) === "locked" ? { cursor: "pointer" } : undefined} />
+            <path key={f.properties?.zone_code} d={projector.path(f)} fill={s.fill} stroke={s.stroke} strokeWidth="1.2" strokeDasharray={s.dash} strokeLinejoin="round" strokeLinecap="round" fillRule="evenodd" onClick={stateOf(f, zoneMap) === "locked" ? onLockedTap : undefined} style={stateOf(f, zoneMap) === "locked" ? { cursor: "pointer" } : undefined} />
           );
         })}
         {featureList.map((f) => {
