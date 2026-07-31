@@ -78,9 +78,15 @@ def main() -> None:
 
     os.environ["CACHE_ONLY"] = "0"
 
-    def counted(payload):  # LLM 호출 계수 래퍼 — 어떤 구현(목·R4)이든 센다
+    def counted(payload):  # 결정적 스텁 + 계수 — 이 스위트는 R2 배선(캐시·폴백·필터)만 검증한다.
+        # R4 실함수(#38 착륙)는 로컬에 API 키가 없으면 항상 예외→템플릿이라 배선 검증이 불가능해
+        # 여기서는 성공 경로를 흉내내는 스텁을 쓴다. R4 문구·실LLM 품질은 #38 소관
         COUNTER["n"] += 1
-        return REAL_GEN(payload)
+        return {
+            "title": f"{payload['activity_name']} 검증 초안",
+            "body": ("오늘의 활동을 차분히 돌아보며 적는 검증용 본문이다. " * 12)[:340],
+            "tags": [payload["activity_name"][:6], "춘천", payload["purpose"]],
+        }
 
     records_mod.generate_record_draft = counted
 
@@ -159,8 +165,10 @@ def main() -> None:
         records_mod.generate_record_draft = counted
 
     def slow(payload):
+        # 타임아웃 후 배경 스레드에서 계속 도는 호출 — REAL_GEN(실 LLM)을 부르면 키 있는
+        # 환경에서 결과가 버려지는 과금 호출이 된다(검수 반영). 고정 dict로 대체
         time.sleep(1.0)
-        return REAL_GEN(payload)
+        return {"title": "지연 스텁", "body": "가" * 300, "tags": ["지연"]}
 
     try:
         records_mod.generate_record_draft = slow
@@ -255,7 +263,7 @@ def main() -> None:
     r12b = client.get("/api/records", headers=bearer(sid10))
     check(
         "보관함 — 형식·소유 분리·balance·titles",
-        r12.status_code == 200 and set(b12) == {"records", "balance", "titles"}
+        r12.status_code == 200 and set(b12) == {"records", "balance", "titles", "zone_map"}
         and len(b12["records"]) == 1 and set(b12["records"][0]) == LIST_ITEM_KEYS
         and b12["records"][0]["verified"] is True and b12["balance"] == 100
         and b12["titles"] == ["봄내 첫걸음"]

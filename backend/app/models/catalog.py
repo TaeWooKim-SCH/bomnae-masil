@@ -65,6 +65,9 @@ class Activity(Base):
     # (운동·건강/문화·공연/공예·만들기/사진·미디어/요리·먹거리/학습·어학/자연·나들이).
     # 매핑 안 된 활동은 null 또는 빈 값
     interest_tags: Mapped[str | None] = mapped_column(Text)
+    # 활동지의 행정동(#99 조각지도 — collected·available 계산 원천). R3 백필(모아봄 data-regions
+    # 등), 미확인 활동은 null(조각지도 계산에서 제외)
+    zone_code: Mapped[str | None] = mapped_column(String)
 
 
 class Merchant(Base):

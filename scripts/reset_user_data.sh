@@ -10,4 +10,4 @@ if [ "${1:-}" != "--yes" ]; then
   [ "$answer" = "y" ] || { echo "중단했습니다"; exit 1; }
 fi
 
-exec ./.venv/bin/python backend/scripts/reset_user_data.py
+exec ./.venv/bin/python backend/scripts/reset_user_data.py "$@"
