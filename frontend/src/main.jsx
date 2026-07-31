@@ -464,19 +464,30 @@ function RecommendationSkeleton() {
 
 function QuestMap({ quest, expanded, onToggleExpanded }) {
   const mapRef = React.useRef(null);
+  const mapInstanceRef = React.useRef(null);
+  const mapOverlaysRef = React.useRef([]);
   const [mapStatus, setMapStatus] = React.useState("지도를 불러오는 중이에요.");
 
   React.useEffect(() => {
+    let disposed = false;
     const sdkScript = document.getElementById("kakao-map-sdk");
+    const clearMap = () => {
+      mapOverlaysRef.current.forEach((overlay) => overlay.setMap?.(null));
+      mapOverlaysRef.current = [];
+      mapInstanceRef.current = null;
+      mapRef.current?.replaceChildren();
+    };
     const createMap = () => {
       if (!window.kakao?.maps || !mapRef.current) {
         setMapStatus("지도를 불러오지 못했어요.");
         return;
       }
       window.kakao.maps.load(() => {
-        if (!mapRef.current) return;
+        if (disposed || !mapRef.current) return;
+        clearMap();
         const { activity, mission, board_stop: boardStop, alight_stop: alightStop, path } = quest.coords;
         const map = new window.kakao.maps.Map(mapRef.current, { center: new window.kakao.maps.LatLng(activity.lat, activity.lng), level: 5 });
+        mapInstanceRef.current = map;
         const bounds = new window.kakao.maps.LatLngBounds();
         const locations = [
           { point: activity, label: "활동지", kind: "activity" },
@@ -487,15 +498,17 @@ function QuestMap({ quest, expanded, onToggleExpanded }) {
         locations.forEach(({ point, label, kind }) => {
           const position = new window.kakao.maps.LatLng(point.lat, point.lng);
           bounds.extend(position);
-          new window.kakao.maps.Marker({ map, position, title: label });
+          const marker = new window.kakao.maps.Marker({ map, position, title: label });
           const markerLabel = document.createElement("span");
           markerLabel.className = `map-marker-label ${kind}`;
           markerLabel.textContent = label;
-          new window.kakao.maps.CustomOverlay({ map, position, content: markerLabel, yAnchor: 2.1 });
+          const markerOverlay = new window.kakao.maps.CustomOverlay({ map, position, content: markerLabel, yAnchor: 2.1 });
+          mapOverlaysRef.current.push(marker, markerOverlay);
         });
         const pathPoints = path.map(([lat, lng]) => new window.kakao.maps.LatLng(lat, lng));
         pathPoints.forEach((point) => bounds.extend(point));
-        new window.kakao.maps.Polyline({ map, path: pathPoints, strokeWeight: 5, strokeColor: "#0E87C4", strokeOpacity: .9, strokeStyle: "solid" });
+        const polyline = new window.kakao.maps.Polyline({ map, path: pathPoints, strokeWeight: 5, strokeColor: "#0E87C4", strokeOpacity: .9, strokeStyle: "solid" });
+        mapOverlaysRef.current.push(polyline);
         map.setBounds(bounds, 34, 34, 34, 34);
         setMapStatus("활동지, 미션 가게, 승하차 정류장을 표시하고 있어요.");
       });
@@ -507,10 +520,19 @@ function QuestMap({ quest, expanded, onToggleExpanded }) {
       sdkScript?.addEventListener("error", mapError, { once: true });
     }
     return () => {
+      disposed = true;
+      clearMap();
       sdkScript?.removeEventListener("load", createMap);
       sdkScript?.removeEventListener("error", mapError);
     };
-  }, [quest, expanded]);
+  }, [quest]);
+
+  React.useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return undefined;
+    const relayout = window.setTimeout(() => map.relayout(), 0);
+    return () => window.clearTimeout(relayout);
+  }, [expanded]);
 
   return <section className={expanded ? "detail-map-wrap expanded" : "detail-map-wrap"} aria-label="퀘스트 지도"><div ref={mapRef} className="detail-map" /><button className="map-expand-button" type="button" onClick={onToggleExpanded} aria-label={expanded ? "지도 전체 화면 닫기" : "지도를 전체 화면으로 보기"}>{expanded ? "×" : "⛶"}</button><div className="map-legend" aria-hidden="true"><span className="activity">● 활동지</span>{quest.mission && <span className="mission">● 미션 가게</span>}<span className="stop">■ 승하차 정류장</span></div><p className="map-status">{mapStatus}</p></section>;
 }
@@ -832,11 +854,17 @@ const INFLOW_COLORS = {
 
 function DashboardMap({ layer, data }) {
   const mapRef = React.useRef(null);
+  const mapOverlaysRef = React.useRef([]);
   const [mapStatus, setMapStatus] = React.useState("지도를 불러오는 중이에요.");
 
   React.useEffect(() => {
     let cancelled = false;
     const sdkScript = document.getElementById("kakao-map-sdk");
+    const clearMap = () => {
+      mapOverlaysRef.current.forEach((overlay) => overlay.setMap?.(null));
+      mapOverlaysRef.current = [];
+      mapRef.current?.replaceChildren();
+    };
     const drawMap = () => {
       if (!window.kakao?.maps || !mapRef.current) {
         setMapStatus("지도를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
@@ -844,7 +872,7 @@ function DashboardMap({ layer, data }) {
       }
       window.kakao.maps.load(() => {
         if (cancelled || !mapRef.current) return;
-        mapRef.current.replaceChildren();
+        clearMap();
         const center = new window.kakao.maps.LatLng(37.8813, 127.7298);
         const map = new window.kakao.maps.Map(mapRef.current, { center, level: 7 });
         const bounds = new window.kakao.maps.LatLngBounds();
@@ -853,6 +881,7 @@ function DashboardMap({ layer, data }) {
           const hoverLabel = document.createElement("div");
           hoverLabel.className = "dashboard-zone-label";
           const hoverOverlay = new window.kakao.maps.CustomOverlay({ content: hoverLabel, yAnchor: 1.35 });
+          mapOverlaysRef.current.push(hoverOverlay);
           data.features.forEach((feature) => {
             const points = feature.geometry.coordinates[0].map(([lng, lat]) => new window.kakao.maps.LatLng(lat, lng));
             points.forEach((point) => bounds.extend(point));
@@ -865,6 +894,7 @@ function DashboardMap({ layer, data }) {
               fillColor: ACCESSIBILITY_COLORS[feature.properties.quintile] ?? ACCESSIBILITY_COLORS[1],
               fillOpacity: .58,
             });
+            mapOverlaysRef.current.push(polygon);
             const showZone = (event) => {
               hoverLabel.textContent = `${feature.properties.name} · ${feature.properties.score}점`;
               hoverOverlay.setPosition(event.latLng);
@@ -886,11 +916,12 @@ function DashboardMap({ layer, data }) {
             const dot = document.createElement("span");
             dot.className = "dashboard-store-dot";
             dot.style.background = INFLOW_COLORS[feature.properties.inflow_status] ?? INFLOW_COLORS.일반;
-            new window.kakao.maps.CustomOverlay({ map, position, content: dot, yAnchor: .5, xAnchor: .5 });
             const label = document.createElement("div");
             label.className = "dashboard-store-label";
             label.textContent = `${feature.properties.name} · ${feature.properties.category}`;
-            new window.kakao.maps.CustomOverlay({ map, position, content: label, yAnchor: 2.2, xAnchor: .5 });
+            const dotOverlay = new window.kakao.maps.CustomOverlay({ map, position, content: dot, yAnchor: .5, xAnchor: .5 });
+            const labelOverlay = new window.kakao.maps.CustomOverlay({ map, position, content: label, yAnchor: 2.2, xAnchor: .5 });
+            mapOverlaysRef.current.push(dotOverlay, labelOverlay);
           });
         }
         if (data.features.length) map.setBounds(bounds, 42, 42, 42, 42);
@@ -905,6 +936,7 @@ function DashboardMap({ layer, data }) {
     }
     return () => {
       cancelled = true;
+      clearMap();
       sdkScript?.removeEventListener("load", drawMap);
       sdkScript?.removeEventListener("error", onError);
     };
