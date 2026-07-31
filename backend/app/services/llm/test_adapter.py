@@ -35,6 +35,28 @@ class GenerateTest(unittest.TestCase):
             base_url="https://factchat-cloud.mindlogic.ai/v1/gateway/claude",
         )
 
+    @patch("app.services.llm.adapter.anthropic.Anthropic")
+    @patch.dict(
+        os.environ,
+        {
+            "ANTHROPIC_API_KEY": "gateway-test-key",
+            "LLM_MODEL": "claude-sonnet-4-6",
+        },
+        clear=True,
+    )
+    def test_uses_the_requested_token_limit(self, client_class: object) -> None:
+        client_class.return_value.messages.create.return_value.content = [
+            SimpleNamespace(text="짧은 문구")
+        ]
+
+        generate("짧게 생성해줘", max_tokens=200)
+
+        client_class.return_value.messages.create.assert_called_once_with(
+            model="claude-sonnet-4-6",
+            max_tokens=200,
+            messages=[{"role": "user", "content": "짧게 생성해줘"}],
+        )
+
     @patch("builtins.print")
     @patch("app.services.llm.adapter.sys.stdout")
     def test_prints_the_smoke_result_as_utf8(
