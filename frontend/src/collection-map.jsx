@@ -12,14 +12,16 @@ const NAVY = "#0B3A52";
 const SUB = "#5E6B72";
 const FAINT = "#93A0A8";
 
-// 수집 대상 = 서버 zone_map.available(활동이 1건 이상 있는 동, 계약 §5). 아래 목록은
-// available이 아직 안 왔을 때(로딩·비로그인)만 쓰는 표시용 폴백이다 — 판정의 진실은 서버다.
-const FALLBACK_DONGS = ["교동", "근화동", "소양동", "약사명동", "조운동", "효자1동", "석사동", "퇴계동", "강남동"];
+// 두 가지를 구분한다 — 섞으면 확대 지도에 거대 읍·면이 끼어들어 도심이 찌그러진다.
+//  (1) 지리: 도심 확대 지도에 무엇을 그릴지 — 서로 붙어 있고 면적이 비슷한 도심 동 고정 목록
+//  (2) 데이터: 조각을 모을 수 있는 동인지 — 서버 zone_map.available(계약 §5)이 진실
+const DOWNTOWN_DONGS = ["교동", "근화동", "소양동", "약사명동", "조운동", "효자1동", "효자2동", "효자3동", "후평1동", "후평2동", "후평3동", "석사동", "퇴계동", "강남동"];
 const dongName = (f) => (f.properties?.name ?? "").split(" ").pop();
-export const isCore = (f, zoneMap) => {
+export const isDowntown = (f) => DOWNTOWN_DONGS.includes(dongName(f));
+export const isCollectible = (f, zoneMap) => {
   const available = zoneMap?.available ?? [];
   if (available.length) return available.includes(f.properties?.zone_code);
-  return FALLBACK_DONGS.includes(dongName(f));
+  return isDowntown(f); // available 미수신(로딩·비로그인) 시 표시용 폴백
 };
 
 const MILESTONES = [
@@ -76,6 +78,10 @@ function makeProjector(featureList, w = 360, h = 300, pad = 10) {
         })
         .join("");
     },
+    area(feature) {
+      const pts = ringPoints(feature.geometry).map(px);
+      return pts.length ? polygonArea(pts) : 0;
+    },
     centroid(feature) {
       const pts = ringPoints(feature.geometry).map(px);
       if (!pts.length) return [0, 0];
@@ -84,10 +90,42 @@ function makeProjector(featureList, w = 360, h = 300, pad = 10) {
   };
 }
 
+// 작은 동이 밀집한 구역(효자·후평 등)에서 centroid 라벨이 서로 겹친다.
+// 면적이 큰 동부터 자리를 잡고, 충돌하면 위·아래로 비켜 놓고, 그래도 안 되면 생략한다
+// (색으로 상태는 이미 보이므로 라벨 생략이 정보 손실을 만들지 않는다).
+function polygonArea(points) {
+  let sum = 0;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    sum += (points[j][0] + points[i][0]) * (points[j][1] - points[i][1]);
+  }
+  return Math.abs(sum) / 2;
+}
+
+function layoutLabels(entries) {
+  const CHAR_W = 9.2; // 한글은 폰트 크기와 글자 폭이 거의 같다 (9px 기준, viewBox 단위)
+  const LINE_H = 10.5;
+  const placed = [];
+  const result = new Map();
+  [...entries].sort((a, b) => b.area - a.area).forEach((entry) => {
+    const half = (entry.text.length * CHAR_W) / 2;
+    const offsets = entry.down ? [0, 11, 21, 31] : [0, -11, 11, -21, 21, -31, 31];
+    for (const dy of offsets) {
+      const box = { x1: entry.x - half, x2: entry.x + half, y1: entry.y + dy - LINE_H / 2, y2: entry.y + dy + LINE_H / 2 };
+      const hit = placed.some((p) => !(box.x2 < p.x1 || box.x1 > p.x2 || box.y2 < p.y1 || box.y1 > p.y2));
+      if (!hit) {
+        placed.push(box);
+        result.set(entry.key, entry.y + dy);
+        return;
+      }
+    }
+  });
+  return result;
+}
+
 function stateOf(feature, zoneMap) {
   const code = feature.properties?.zone_code;
   if (zoneMap.collected.includes(code)) return "filled";
-  return isCore(feature, zoneMap) ? "open" : "locked";
+  return isCollectible(feature, zoneMap) ? "open" : "locked";
 }
 
 const PIECE_STYLE = {
@@ -98,6 +136,15 @@ const PIECE_STYLE = {
 
 function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLabels }) {
   const projector = React.useMemo(() => makeProjector(featureList), [featureList]);
+  const labelY = React.useMemo(() => {
+    if (!projector) return new Map();
+    return layoutLabels(featureList.map((f) => {
+      const [cx, cy] = projector.centroid(f);
+      const lockLabel = stateOf(f, zoneMap) === "locked" && showLockIcon && !isDowntown(f);
+      // 자물쇠 라벨은 아이콘 아래(+14)에 그려진다 — 충돌 계산도 그 실제 위치로 해야 맞다
+      return { key: f.properties?.zone_code, x: cx, y: lockLabel ? cy + 14 : cy, down: lockLabel, area: projector.area(f), text: dongName(f) };
+    }));
+  }, [featureList, projector, zoneMap, showLockIcon]);
   if (!projector) {
     return <div style={{ padding: "36px 0", textAlign: "center", font: `500 12px Pretendard,sans-serif`, color: FAINT }}>지도를 준비하고 있어요</div>;
   }
@@ -119,18 +166,20 @@ function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLab
         {featureList.map((f) => {
           const st = stateOf(f, zoneMap);
           const [cx, cy] = projector.centroid(f);
-          if (st === "locked" && showLockIcon) {
+          if (st === "locked" && showLockIcon && !isDowntown(f)) {
             return (
               <g key={`lock-${f.properties?.zone_code}`} transform={`translate(${cx},${cy})`} pointerEvents="none">
                 <rect x="-5" y="-6" width="10" height="8" rx="2" fill={FAINT} />
                 <path d="M-3,-6 v-2 a3,3 0 0 1 6,0 v2" stroke={FAINT} strokeWidth="1.8" fill="none" />
-                <text x="0" y="14" textAnchor="middle" style={{ font: "600 9px Pretendard,sans-serif", fill: "#8A96A0" }}>{dongName(f)}</text>
+                <text x="0" y={(labelY.get(f.properties?.zone_code) ?? cy + 14) - cy} textAnchor="middle" style={{ font: "600 9px Pretendard,sans-serif", fill: "#8A96A0" }}>{dongName(f)}</text>
               </g>
             );
           }
           if (hideCoreLabels) return null;
+          const y = labelY.get(f.properties?.zone_code);
+          if (y === undefined) return null; // 자리를 못 잡은 라벨은 생략 — 겹쳐 읽히느니 비운다
           return (
-            <text key={`label-${f.properties?.zone_code}`} x={cx} y={cy} textAnchor="middle" pointerEvents="none" style={{ font: "700 9px Pretendard,sans-serif", fill: PIECE_STYLE[st].label }}>
+            <text key={`label-${f.properties?.zone_code}`} x={cx} y={y} textAnchor="middle" pointerEvents="none" style={{ font: "700 9px Pretendard,sans-serif", fill: PIECE_STYLE[st].label }}>
               {dongName(f)}
             </text>
           );
@@ -141,7 +190,7 @@ function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLab
 }
 
 function coreProgress(zoneMap, features) {
-  const coreCodes = features.filter((f) => isCore(f, zoneMap)).map((f) => f.properties?.zone_code);
+  const coreCodes = features.filter((f) => isCollectible(f, zoneMap)).map((f) => f.properties?.zone_code);
   const n = zoneMap.collected.filter((c) => coreCodes.includes(c)).length;
   return { n, m: coreCodes.length || zoneMap.available.length };
 }
@@ -174,7 +223,7 @@ export function CollectionModal({ onClose }) {
   const [notice, setNotice] = React.useState("");
   const { n, m } = coreProgress(zoneMap, features);
   const complete = m > 0 && n >= m;
-  const coreFeatures = features.filter((f) => isCore(f, zoneMap));
+  const coreFeatures = features.filter(isDowntown); // 확대 지도는 지리 기준 (외곽 읍·면이 들어오면 도심이 뭉개진다)
   const lockedTap = () => {
     setNotice("아직 준비 중인 동네예요");
     window.setTimeout(() => setNotice(""), 1800);
@@ -274,7 +323,7 @@ export function PieceRevealModal({ feature, features, zoneMap, onDone }) {
   const { n, m } = coreProgress(zoneMap, features);
   const code = feature.properties?.zone_code;
   const already = zoneMap.collected.includes(code);
-  const count = Math.min(m, n + (already || !isCore(feature, zoneMap) ? 0 : 1));
+  const count = Math.min(m, n + (already || !isCollectible(feature, zoneMap) ? 0 : 1));
   const projector = makeProjector(features);
   return (
     <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", width: "min(100%, 430px)", transform: "translateX(-50%)", background: "rgba(10,26,36,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 58, backdropFilter: "blur(3px)" }}>
