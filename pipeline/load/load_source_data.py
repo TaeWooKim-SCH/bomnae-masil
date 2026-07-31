@@ -11,7 +11,7 @@ import io
 import os
 from pathlib import Path
 
-from .common import output_dir, valid_wgs84
+from .common import in_chuncheon_bounds, output_dir, valid_wgs84
 
 ACTIVITY_COLUMNS = (
     "activity_id", "source_event_id", "name", "type", "status", "genre",
@@ -87,6 +87,16 @@ def _interest_tags(value: str, context: str, *, required: bool = False) -> str:
     return ";".join(tags)
 
 
+def _seed_schedule(seed: dict[str, str], activity_id: str) -> tuple[str, str]:
+    """Expose verified seed hours through the existing activity text contract."""
+    open_time, close_time = seed.get("open_time", ""), seed.get("close_time", "")
+    if len(open_time) != 5 or len(close_time) != 5 or open_time >= close_time:
+        raise ValueError(f"{activity_id}: always-open seed requires verified open_time and close_time")
+    closed_days = seed.get("closed_days", "").strip()
+    suffix = f"; 휴관 {closed_days}" if closed_days else ""
+    return f"{open_time}-{close_time}{suffix}", "60분 (데모 고정 체류)"
+
+
 def _activity_rows() -> list[dict[str, str]]:
     culture = _read_rows("activities_geocoded.csv", ACTIVITY_COLUMNS)
     seeds = _read_rows(
@@ -97,6 +107,8 @@ def _activity_rows() -> list[dict[str, str]]:
     seen: set[str] = set()
     for row in culture:
         _coordinates(row, row["activity_id"])
+        if not in_chuncheon_bounds(float(row["longitude"]), float(row["latitude"])):
+            continue
         _bool(row["price_unknown"], row["activity_id"])
         _bool(row["needs_geocode"], row["activity_id"])
         if row["needs_geocode"] != "False":
@@ -109,6 +121,7 @@ def _activity_rows() -> list[dict[str, str]]:
         activity_id = seed["activity_id"]
         if not activity_id or activity_id in seen or seed["type"] != "상시형":
             raise ValueError(f"{activity_id or 'always_open'}: duplicate or invalid always-open activity")
+        schedule_text, runtime_text = _seed_schedule(seed, activity_id)
         converted = {
             "activity_id": activity_id,
             "source_event_id": activity_id,
@@ -118,8 +131,8 @@ def _activity_rows() -> list[dict[str, str]]:
             "genre": "",
             "start_date": DEMO_DATE,
             "end_date": DEMO_DATE,
-            "schedule_text": seed["schedule_text"],
-            "runtime_text": "",
+            "schedule_text": schedule_text,
+            "runtime_text": runtime_text,
             "price_krw": seed["price_krw"],
             "price_unknown": "False",
             "audience_text": "",

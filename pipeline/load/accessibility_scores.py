@@ -13,7 +13,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from .common import dataset_dir, number, output_dir, read_csv, valid_wgs84, write_csv
+from .common import dataset_dir, in_chuncheon_bounds, number, output_dir, read_csv, valid_wgs84, write_csv
 
 ACTIVITY_ALIGHT_RADIUS_M = 500
 WALK_METERS_PER_MINUTE = 80  # 4.8 km/h
@@ -168,7 +168,7 @@ def _load_activities() -> list[Activity]:
     for row in rows:
         activity_id = (row.get("activity_id") or "").strip()
         longitude, latitude = number(row.get("longitude")), number(row.get("latitude"))
-        if activity_id and activity_id not in seen and valid_wgs84(longitude, latitude):
+        if activity_id and activity_id not in seen and in_chuncheon_bounds(longitude, latitude):
             seen.add(activity_id)
             activities.append(Activity(activity_id, longitude, latitude))
     if not activities:
