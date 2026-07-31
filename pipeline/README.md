@@ -116,6 +116,21 @@ python -m pipeline.load.load_accessibility_scores --rebuild
 `DATABASE_URL`은 `backend/.env` 또는 실행 환경에만 둔다. 실제 접속값·생성된 CSV는
 Git에 올리지 않는다.
 
+## 상권 이용자 실태 기반 유입 상태 (#26)
+
+2021년 실태 스냅샷은 상호명 정규화 후 정확히 일치하고 좌표가 30m 이내인 현재
+상가에만 보수적으로 연결한다. 매칭된 상가만 원본의 `읍면동` 단위 이용자수 평균으로
+하위 40% `확정저유입`, 상위 20% `붐빔`, 나머지 `일반`으로 판정한다. 매칭되지 않은
+상가는 `추정후보`를 유지한다.
+
+```powershell
+python -m pipeline.load.merchant_inflow
+python -m pipeline.load.load_merchant_inflow
+```
+
+두 번째 명령은 매칭된 상가의 `inflow_status`만 갱신하며, 상가 전체 재적재나
+`verify_code` 변경을 하지 않는다.
+
 문화행사 원천 중 좌표가 춘천시 범위 밖인 행은 지오코딩·점수표·DB 적재에서 제외한다.
 이미 적재된 활동 원천만 바로잡아야 할 때는 다른 R3-2 테이블을 재적재하지 않고 아래
 전용 명령을 사용한다.
