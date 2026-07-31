@@ -80,19 +80,21 @@ def verify_quest(
             raise _error(400, "INVALID_AMOUNT", "금액을 확인해 주세요 (1,000~200,000원)")
         stamp_type, amount = "spend", body.amount_krw
 
-    db.add(
-        Stamp(
-            session_id=current.id,
-            quest_id=quest.id,
-            merchant_id=quest.merchant_id,
-            stamp_type=stamp_type,
-            amount_krw=amount,
-            created_at=now_kst(),
-        )
-    )
-    quest.status = "stamped"
-    balance, unlocked = add_points(db, current.id, quest.id, STAMP_POINTS, REASON_STAMP)
+    # try 범위가 add(Stamp)부터인 이유(검수 반영): add_points 안의 잔액 SELECT가 autoflush를
+    # 일으켜 유니크 위반이 commit이 아니라 그 지점에서 터진다 — 좁게 감싸면 경합 패자가 500
     try:
+        db.add(
+            Stamp(
+                session_id=current.id,
+                quest_id=quest.id,
+                merchant_id=quest.merchant_id,
+                stamp_type=stamp_type,
+                amount_krw=amount,
+                created_at=now_kst(),
+            )
+        )
+        quest.status = "stamped"
+        balance, unlocked = add_points(db, current.id, quest.id, STAMP_POINTS, REASON_STAMP)
         db.commit()
     except IntegrityError:  # 동시 인증 경합 — 먼저 찍힌 스탬프가 승자, 패자는 멱등 응답
         db.rollback()
