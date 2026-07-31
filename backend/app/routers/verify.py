@@ -16,7 +16,7 @@ from app.core.points import REASON_STAMP, add_points, balance_of
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import Quest, Stamp
-from app.routers._merchant_codes_mock import merchant_code
+from app.core.merchant_codes import merchant_verify_code
 from app.timebase import now_kst
 
 router = APIRouter(prefix="/quests", tags=["quests"])
@@ -72,7 +72,7 @@ def verify_quest(
             400, "WRONG_STORE", f"이 퀘스트의 미션 가게는 {mission['merchant_name']}예요"
         )
     if body.method in ("qr", "code"):
-        if body.code != merchant_code(quest.merchant_id):
+        if body.code != merchant_verify_code(db, quest.merchant_id):
             raise _error(400, "INVALID_CODE", "코드를 다시 확인해 주세요")
         stamp_type, amount = "visit", None
     else:  # receipt — 사진은 애초에 받지 않는다. 금액 범위만 서버 검증
