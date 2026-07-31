@@ -364,11 +364,114 @@ function PendingScreen({ title, description }) {
   return <main className="app-shell pending-screen"><AppHeader balance={0} titles={[]} health={null} /><section><p className="eyebrow">봄내마실</p><h1>{title}</h1><p>{description}</p><button className="primary-button" type="button" onClick={() => navigate("/")}>홈으로 돌아가기</button></section></main>;
 }
 
+const SCORE_ITEMS = [
+  { key: "market", label: "상권 기여", color: "#0e87c4" },
+  { key: "interest", label: "관심사", color: "#7166c7" },
+  { key: "access", label: "접근성", color: "#1b8a70" },
+  { key: "time", label: "시간", color: "#d5903c" },
+  { key: "budget", label: "예산", color: "#cf6874" },
+];
+
+function formatKrw(value) {
+  return `${value.toLocaleString()}원`;
+}
+
+function QuestCard({ quest, onOpen }) {
+  const theme = quest.activity.type === "신청형" ? "course" : quest.activity.type === "상시형" ? "always" : "today";
+  const scoreItems = SCORE_ITEMS.map((item) => ({ ...item, value: quest.score.breakdown[item.key] }));
+
+  function openWithKeyboard(event) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpen();
+    }
+  }
+
+  return (
+    <article className="quest-recommend-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={openWithKeyboard} aria-label={`${quest.title} 상세 보기`}>
+      <div className={`quest-card-hero ${theme}`}>
+        <span>{quest.activity.type} · {quest.activity.place_name}</span>
+        <div className="hero-badges">
+          {quest.revisit && <span className="revisit-badge">다시 가기</span>}
+          {quest.activity.d_day !== null && <span className="dday-badge">개강 D-{quest.activity.d_day}</span>}
+        </div>
+      </div>
+      <div className="quest-card-body">
+        <div className="quest-card-title-row">
+          <h2>{quest.title}</h2>
+          <span className="point-badge">최대 {quest.max_points}P</span>
+        </div>
+        <p className="quest-schedule">{quest.activity.name} · {quest.activity.schedule_text}</p>
+        <p className={quest.mission ? "mission-copy" : "mission-copy no-mission"}>
+          {quest.mission ? `가게 미션 — ${quest.mission.copy}` : "이번엔 활동만 즐겨요 — 기록으로 완주 (+60점)"}
+        </p>
+        <div className="quest-meta">
+          <span>{quest.route.route_no}번 · {quest.route.stops_count}개 정거장 · 약 {quest.route.ride_min}분</span>
+          {quest.route.no_transfer && <span className="no-transfer">환승 없음</span>}
+          <span>약 {formatKrw(quest.budget_total_krw)} (버스 왕복 포함)</span>
+        </div>
+        {quest.route.basis_note && <p className="basis-note">{quest.route.basis_note}</p>}
+        <div className="score-bar" aria-label={`추천 점수 ${quest.score.total}점`}>
+          {scoreItems.map((item) => <span key={item.key} style={{ width: `${item.value}%`, background: item.color }} />)}
+        </div>
+        <div className="score-legend">
+          {scoreItems.map((item) => <span key={item.key}><i style={{ background: item.color }} />{item.label} {item.value}</span>)}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function RecommendationSkeleton() {
+  return (
+    <>
+      <p className="recommend-loading-copy">오늘의 춘천을 조합하고 있어요…</p>
+      <div className="recommend-skeletons" aria-label="추천 결과를 불러오는 중">
+        {[1, 2, 3].map((item) => <div className="recommend-skeleton" key={item}><i /><i /><i /></div>)}
+      </div>
+    </>
+  );
+}
+
 function RecommendHandoff() {
   const navigate = useNavigate();
   const { state } = useLocation();
-  if (!state?.result) return <PendingScreen title="추천을 준비하고 있어요" description="추천 조건을 선택한 뒤 다시 시도해 주세요." />;
-  return <main className="app-shell pending-screen"><AppHeader balance={0} titles={[]} health={null} /><section><p className="eyebrow">추천 조건이 전달됐어요</p><h1>오늘의 춘천을<br />조합하고 있어요</h1><p>{state.result.quests?.length ?? 0}개의 코스를 준비했어요. 카드 화면은 다음 작업에서 이어집니다.</p><button className="primary-button" type="button" onClick={() => navigate("/", { state: { lastRequest: state.request, lastResult: state.result } })}>조건 다시 고르기</button></section></main>;
+  const [loading, setLoading] = React.useState(Boolean(state?.result));
+  const [moreShown, setMoreShown] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!state?.result) return undefined;
+    const timer = window.setTimeout(() => setLoading(false), 450);
+    return () => window.clearTimeout(timer);
+  }, [state?.result]);
+
+  if (!state?.result) return <PendingScreen title="추천을 준비하고 있어요" description="홈에서 조건을 선택하면 오늘의 퀘스트를 추천해 드려요." />;
+
+  const result = state.result;
+  const quests = moreShown ? [...result.quests, ...result.more] : result.quests;
+  const hasMore = result.more.length > 0 && !moreShown;
+
+  return (
+    <main className="app-shell">
+      <div className="recommend-content">
+        <AppHeader balance={0} titles={[]} health={null} />
+        <button className="back-link" type="button" onClick={() => navigate("/", { state: { lastRequest: state.request, lastResult: state.result } })}>‹ 조건 다시 고르기</button>
+        <h1>오늘의 추천 퀘스트</h1>
+        <p className="recommend-summary">선택한 시간과 출발지에서 가볍게 즐길 수 있는 코스예요.</p>
+        {loading ? <RecommendationSkeleton /> : (
+          <>
+            {result.relaxed && <p className="relaxed-notice">{result.relaxed.message}</p>}
+            <p className="market-notice">골목의 <b>숨은 가게</b>를 먼저 소개해 드려요 — 순위에 상권 기여 30%가 반영돼요.</p>
+            <section className="recommend-card-list" aria-label="추천 퀘스트 목록">
+              {quests.map((quest) => <QuestCard key={quest.quest_id} quest={quest} onOpen={() => navigate(`/quests/${quest.quest_id}`)} />)}
+            </section>
+            {hasMore && <button className="more-button" type="button" onClick={() => setMoreShown(true)}>다른 추천 보기</button>}
+            {result.more.length === 0 || moreShown ? <p className="more-exhausted">추천을 모두 보여드렸어요 — 조건을 바꿔 다시 받아보세요.</p> : null}
+          </>
+        )}
+      </div>
+    </main>
+  );
 }
 
 function RouterApp() {
