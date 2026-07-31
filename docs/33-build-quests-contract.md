@@ -72,7 +72,7 @@ class BuildQuestsResult(BaseModel):
 ```
 
 - `cards`의 1~3번째는 R2가 API 응답 `quests`로, 4~6번째는 `more`로 분리한다.
-- `cards`는 **0장이 될 수 없다**. 4단계 완화 후에도 활동 주변 가게가 없으면 `mission: null`인 가게 없는 퀘스트를 만든다.
+- `cards`는 3장(최대 6장)을 목표로 조립하고, 4단계 완화 후에도 활동 주변 가게가 없으면 `mission: null`인 가게 없는 퀘스트를 만든다. **완화를 모두 소진해도 후보가 0이면 `cards: []`가 정상 반환이다** (8/1 ②급 결정 — §4-2 빈 결과 규약·30-계약 §3 참조).
 - `QuestCardDraft`는 API `QuestCard`에서 `quest_id`를 제외한 같은 필드·같은 타입이다. R2가 ID를 주입한 뒤 API `QuestCard`가 된다.
 - `relaxed`가 `null`이면 최초 조건으로 찾은 결과다. 하나라도 완화했으면 적용한 모든 단계를 순서대로 기록한다.
 - 네 단계가 모두 적용된 경우는 `{"steps": ["budget", "interest", "always_open", "revisit"], "message": "조건을 조금 넓혀 찾았어요"}`로 반환한다.
