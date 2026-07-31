@@ -1,6 +1,15 @@
 from pipeline.load import load_source_data
 
 
+def test_always_open_seed_schedule_uses_machine_readable_hours_and_fixed_stay():
+    schedule, runtime = load_source_data._seed_schedule(
+        {"open_time": "09:00", "close_time": "18:00"}, "always_open_place"
+    )
+
+    assert schedule == "09:00-18:00"
+    assert runtime.startswith("60")
+
+
 def test_always_open_seed_is_converted_to_activity_contract(monkeypatch):
     culture = [{
         "activity_id": "culture_1", "source_event_id": "1", "name": "문화행사", "type": "당일형",
@@ -14,7 +23,13 @@ def test_always_open_seed_is_converted_to_activity_contract(monkeypatch):
         "latitude": "37.8", "longitude": "127.7", "interest_tags": "학습·어학", "price_krw": "0", "schedule_text": "자유 이용", "source": "수기씨드",
     }]
 
-    monkeypatch.setattr(load_source_data, "_read_rows", lambda name, _: culture if name == "activities_geocoded.csv" else seeds)
+    monkeypatch.setattr(
+        load_source_data,
+        "_read_rows",
+        lambda name, _: culture if name == "activities_geocoded.csv" else [
+            {**seed, "open_time": "09:00", "close_time": "18:00"} for seed in seeds
+        ],
+    )
 
     rows = load_source_data._activity_rows()
 
@@ -22,6 +37,8 @@ def test_always_open_seed_is_converted_to_activity_contract(monkeypatch):
     assert rows[1]["source_event_id"] == "always_open_place"
     assert rows[1]["start_date"] == "2026-08-01"
     assert rows[1]["needs_geocode"] == "False"
+    assert rows[1]["schedule_text"] == "09:00-18:00"
+    assert rows[1]["runtime_text"].startswith("60")
     assert rows[1]["interest_tags"] == "학습·어학"
 
 
