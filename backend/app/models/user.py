@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy import text as sqltext
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import DateTime
@@ -79,6 +80,13 @@ class Quest(Base):
         # "이어하기"(가장 최근 started 1건)·동시 진행 1개 판정·필터⑤ 조회용
         Index("ix_quests_session_status", "session_id", "status"),
         Index("ix_quests_recommendation_id", "recommendation_id"),
+        # 동시 진행 1개(5-1 확정)의 DB 백스톱 — 동시 start 경합에도 세션당 진행 중 1건만 허용
+        Index(
+            "uq_quests_one_in_progress",
+            "session_id",
+            unique=True,
+            postgresql_where=sqltext("status IN ('started', 'stamped')"),
+        ),
     )
 
 
