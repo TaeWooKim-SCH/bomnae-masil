@@ -173,3 +173,19 @@ R4가 확정한 관심사·출발 동·시간·예산 3세트는
 별도 경고로 남긴다. `확정저유입` 비율은 #26의 동결 판정 결과만 보고하며, 이 스크립트는
 가게 상태를 변경하지 않는다. 춘천 범위 밖 좌표는 후보에서 제외하고 품질 항목에
 별도로 남긴다.
+## KPI demo seed (#50)
+
+The KPI demonstration batch contains 162 fixed, anonymous events. It includes
+30 first-start measurements, 50 mission starts, and 22 verification events;
+there are no user, session, merchant, receipt, or personal identifiers. It
+only replaces `seed=true` rows inside its reserved fixed KST time window and
+never deletes actual (`seed=false`) events.
+
+```powershell
+.\.venv\Scripts\python.exe -m pipeline.load.seed_kpi_demo
+.\.venv\Scripts\python.exe -m pipeline.load.seed_kpi_demo --apply
+```
+
+Run the `--apply` command before `scripts/sync_local.sh` so the offline demo
+database receives the same seed. The dashboard API returns `seed_included=true`
+after loading, which displays the simulation-data footnote in the dashboard.
