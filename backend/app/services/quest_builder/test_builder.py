@@ -8,6 +8,8 @@ from app.services.quest_builder.builder import (
     BuildQuestsRepository,
     MerchantCandidate,
     RouteCandidate,
+    SqlAlchemyQuestRepository,
+    _d_day,
     build_quests,
 )
 
@@ -84,6 +86,31 @@ def score(input_value: dict) -> dict:
 
 
 class BuildQuestsTest(unittest.TestCase):
+    def test_always_open_relaxation_keeps_scheduled_candidates_in_repository_query(self) -> None:
+        class CapturingSession:
+            def __init__(self) -> None:
+                self.statement = None
+
+            def scalars(self, statement):
+                self.statement = statement
+                return []
+
+        session = CapturingSession()
+        repository = SqlAlchemyQuestRepository(session=session)
+
+        self.assertEqual([], repository.activities(include_always_open=True))
+        self.assertNotIn("WHERE activities.type", str(session.statement))
+
+    def test_d_day_uses_the_build_reference_date(self) -> None:
+        application = ActivityCandidate(
+            **{
+                **activity("application", kind="신청형").__dict__,
+                "start_date": date(2026, 8, 6),
+            }
+        )
+
+        self.assertEqual(5, _d_day(application, date(2026, 8, 1)))
+
     def test_package_exports_the_router_contract_function(self) -> None:
         from app.services.quest_builder import build_quests as public_build_quests
 

@@ -85,15 +85,17 @@ class BuildQuestsResult:
 class SqlAlchemyQuestRepository:
     """R2 DB helper와 동결 모델을 사용한 실제 읽기 전용 저장소."""
 
-    def __init__(self) -> None:
-        from sqlalchemy.orm import Session
+    def __init__(self, session: object | None = None) -> None:
+        if session is None:
+            from sqlalchemy.orm import Session
 
-        from app.db import get_engine
+            from app.db import get_engine
 
-        self._session = Session(get_engine())
+            session = Session(get_engine())
+        self._session = session
 
     def close(self) -> None:
-        self._session.close()
+        self._session.close()  # type: ignore[union-attr]
 
     def activities(self, *, include_always_open: bool) -> list[ActivityCandidate]:
         from sqlalchemy import select
@@ -101,9 +103,7 @@ class SqlAlchemyQuestRepository:
         from app.models import Activity
 
         statement = select(Activity)
-        if include_always_open:
-            statement = statement.where(Activity.type == "상시형")
-        else:
+        if not include_always_open:
             statement = statement.where(Activity.type != "상시형")
 
         return [
@@ -121,7 +121,7 @@ class SqlAlchemyQuestRepository:
                     tag for tag in (row.interest_tags or "").split(";") if tag
                 ),
             )
-            for row in self._session.scalars(statement)
+            for row in self._session.scalars(statement)  # type: ignore[union-attr]
         ]
 
     def route_for(
@@ -152,7 +152,7 @@ class SqlAlchemyQuestRepository:
                 .limit(1)
             )
 
-        row = self._session.execute(statement).first()
+        row = self._session.execute(statement).first()  # type: ignore[union-attr]
         if row is None:
             return None
         access, board_stop_name = row
@@ -191,7 +191,7 @@ class SqlAlchemyQuestRepository:
             value=Merchant.inflow_status,
             else_=len(_INFLOW_PRIORITY),
         )
-        row = self._session.execute(
+        row = self._session.execute(  # type: ignore[union-attr]
             select(Merchant, MissionCopy.copy)
             .join(MissionCopy, MissionCopy.merchant_id == Merchant.merchant_id)
             .where(MissionCopy.activity_id == activity_id)
@@ -379,6 +379,7 @@ def _eligible_cards(
                 activity.activity_id in excluded,
                 score_calculator,
                 requested_budget,
+                now.date(),
             )
         )
     return cards
@@ -441,6 +442,7 @@ def _build_card(
     revisit: bool,
     score_calculator: Callable[[dict], Mapping[str, object]],
     requested_budget: int | None,
+    today: date,
 ) -> dict:
     score = dict(
         score_calculator(
@@ -474,7 +476,7 @@ def _build_card(
             "place_name": activity.venue_name,
             "schedule_text": activity.schedule_text or "",
             "price_krw": activity.price_krw,
-            "d_day": _d_day(activity),
+            "d_day": _d_day(activity, today),
         },
         "mission": mission,
         "route": {
@@ -548,8 +550,8 @@ def _budget_fit_ratio(budget_total_krw: int, budget_krw: int | None) -> float:
     return max(0.0, min(1.0, (budget_krw - budget_total_krw) / budget_krw))
 
 
-def _d_day(activity: ActivityCandidate) -> int | None:
-    return None if activity.type != "신청형" else max(0, (activity.start_date - now_kst().date()).days)
+def _d_day(activity: ActivityCandidate, today: date) -> int | None:
+    return None if activity.type != "신청형" else max(0, (activity.start_date - today).days)
 
 
 def _validate_score(score: Mapping[str, object]) -> None:
