@@ -1,10 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { Html5QrcodeScanner } from "html5-qrcode";
+import { api } from "./api/client";
 import "./styles.css";
 
 const APP_KEY = import.meta.env.VITE_KAKAO_MAP_KEY;
-const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const QUESTS = [
   {
     title: "저녁의 필름카메라 입문",
@@ -39,8 +39,7 @@ function App() {
   const [health, setHealth] = React.useState(null);
 
   React.useEffect(() => {
-    fetch(`${API_BASE}/api/health`)
-      .then((response) => response.json())
+    api.health()
       .then(setHealth)
       .catch(() => setHealth({ ok: false, db: false }));
   }, []);

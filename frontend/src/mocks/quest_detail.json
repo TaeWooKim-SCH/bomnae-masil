@@ -1,0 +1,15 @@
+{
+  "quest_id":"q_301",
+  "title":"저녁의 필름카메라 입문",
+  "activity":{"name":"필름카메라 입문 강좌","type":"신청형","place_name":"춘천시평생학습관","schedule_text":"오늘 19:00–21:00","price_krw":10000,"d_day":5},
+  "mission":{"merchant_id":"m_12","merchant_name":"육림고개 봄빛카페","copy":"강좌 끝나고 필름 감성 그대로, 따뜻한 한 잔 어때요?","expected_spend_krw":7000},
+  "route":{"board_stop_name":"석사동 현진아파트","route_no":"300","stops_count":7,"ride_min":25,"walk_min":8,"no_transfer":true,"basis_note":"석사동 현진아파트 정류장 기준"},
+  "budget_total_krw":20000,
+  "score":{"total":86,"breakdown":{"market":26,"interest":22,"access":17,"time":13,"budget":8}},
+  "max_points":100,
+  "revisit":false,
+  "refs":{"activity_id":"a_88","board_stop_id":"stp_1041","alight_stop_id":"stp_2210"},
+  "status":"recommended",
+  "started_at":null,
+  "coords":{"activity":{"lat":37.8791,"lng":127.7292},"mission":{"lat":37.8801,"lng":127.7269},"board_stop":{"lat":37.8672,"lng":127.7211},"alight_stop":{"lat":37.8794,"lng":127.7281},"path":[[37.8672,127.7211],[37.8794,127.7281]]}
+}
