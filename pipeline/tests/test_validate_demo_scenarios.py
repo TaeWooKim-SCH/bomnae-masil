@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from pipeline.load.validate_demo_scenarios import _load_config, distance_m
+from pipeline.load.validate_demo_scenarios import _load_config, distance_m, time_window_minutes
 
 
 def test_distance_m_is_zero_for_same_wgs84_point():
@@ -21,3 +21,10 @@ def test_config_requires_three_scenarios(tmp_path):
 
     with pytest.raises(ValueError, match="at least three"):
         _load_config(path)
+
+
+def test_time_window_minutes_requires_an_increasing_same_day_window():
+    assert time_window_minutes("14:00-18:00") == 240
+
+    with pytest.raises(ValueError):
+        time_window_minutes("18:00-14:00")

@@ -3,28 +3,25 @@
   "merchant_radius_m": 500,
   "scenarios": [
     {
-      "id": "provisional-culture-joyun",
-      "interests": ["문화·공연"],
-      "zone_code": "4211053000",
-      "time": "14:00-17:00",
-      "budget_krw": 10000,
-      "provisional": true
+      "id": "baseline-media-culture-seoksa",
+      "interests": ["사진·미디어", "문화·공연"],
+      "zone_code": "4211065000",
+      "time": "14:00-18:00",
+      "budget_krw": 30000
     },
     {
-      "id": "provisional-nature-yaksamyeong",
-      "interests": ["자연·나들이"],
-      "zone_code": "4211054500",
-      "time": "14:00-17:00",
-      "budget_krw": 10000,
-      "provisional": true
+      "id": "free-outdoor-seoksa",
+      "interests": ["자연·나들이", "운동·건강"],
+      "zone_code": "4211065000",
+      "time": "15:00-18:00",
+      "budget_krw": 10000
     },
     {
-      "id": "provisional-health-soyang",
-      "interests": ["운동·건강"],
-      "zone_code": "4211058000",
-      "time": "14:00-17:00",
-      "budget_krw": 15000,
-      "provisional": true
+      "id": "alley-food-seoksa",
+      "interests": ["요리·먹거리", "사진·미디어"],
+      "zone_code": "4211065000",
+      "time": "12:00-16:00",
+      "budget_krw": 30000
     }
   ]
 }

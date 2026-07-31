@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-"""Validate R3-9 demo candidates against the already-loaded source tables.
-
-The input file intentionally keeps R4's demo choices separate from this
-validator.  The committed entries are provisional until R4 freezes the three
-interest/zone/time/budget combinations in the demo script.
-"""
+"""Validate R3-9 demo candidates against the already-loaded source tables."""
 
 import argparse
 import json
@@ -39,12 +34,26 @@ def _load_config(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _active_candidates(cursor: Any, scenario: dict[str, Any], demo_day: date) -> list[dict[str, Any]]:
+def time_window_minutes(value: str) -> int:
+    """Parse the frozen same-day ``HH:MM-HH:MM`` demo input window."""
+    try:
+        start, end = value.split("-", 1)
+        start_minutes = int(start[:2]) * 60 + int(start[3:])
+        end_minutes = int(end[:2]) * 60 + int(end[3:])
+    except (ValueError, IndexError) as error:
+        raise ValueError("time must use HH:MM-HH:MM") from error
+    if not (0 <= start_minutes < end_minutes <= 24 * 60):
+        raise ValueError("time must be an increasing same-day window")
+    return end_minutes - start_minutes
+
+
+def _active_candidates(cursor: Any, scenario: dict[str, Any], demo_day: date, available_minutes: int) -> list[dict[str, Any]]:
     west, east, south, north = CHUNCHEON_BOUNDS
     cursor.execute(
         """
-        SELECT DISTINCT a.activity_id, a.name, a.type, a.start_date, a.end_date,
+        SELECT a.activity_id, a.name, a.type, a.start_date, a.end_date,
                a.price_krw, a.schedule_text, a.longitude, a.latitude
+             , MIN(score.duration_min) AS shortest_duration_min
         FROM activities AS a
         JOIN accessibility_scores AS score ON score.activity_id = a.activity_id
         WHERE a.start_date <= %s AND a.end_date >= %s
@@ -55,11 +64,14 @@ def _active_candidates(cursor: Any, scenario: dict[str, Any], demo_day: date) ->
               SELECT 1 FROM unnest(string_to_array(COALESCE(a.interest_tags, ''), ';')) AS tag
               WHERE tag = ANY(%s)
           )
+        GROUP BY a.activity_id, a.name, a.type, a.start_date, a.end_date,
+                 a.price_krw, a.schedule_text, a.longitude, a.latitude
+        HAVING MIN(score.duration_min) + 10 + 60 <= %s
         ORDER BY a.activity_id
         """,
-        (demo_day, demo_day, scenario["budget_krw"], west, east, south, north, scenario["zone_code"], scenario["interests"]),
+        (demo_day, demo_day, scenario["budget_krw"], west, east, south, north, scenario["zone_code"], scenario["interests"], available_minutes),
     )
-    columns = ("activity_id", "name", "type", "start_date", "end_date", "price_krw", "schedule_text", "longitude", "latitude")
+    columns = ("activity_id", "name", "type", "start_date", "end_date", "price_krw", "schedule_text", "longitude", "latitude", "shortest_duration_min")
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
@@ -140,11 +152,16 @@ def validate(config_path: Path = DEFAULT_SCENARIOS) -> dict[str, Any]:
         with connection.cursor() as cursor:
             scenario_results = []
             for scenario in config["scenarios"]:
-                candidates = _active_candidates(cursor, scenario, demo_day)
+                available_minutes = time_window_minutes(scenario["time"])
+                if available_minutes < 60:
+                    raise ValueError(f"{scenario['id']}: time window must be at least 60 minutes")
+                candidates = _active_candidates(cursor, scenario, demo_day, available_minutes)
                 candidate_details = []
                 for candidate in candidates:
                     candidate_details.append({
                         "activity_id": candidate["activity_id"],
+                        "shortest_duration_min": candidate["shortest_duration_min"],
+                        "required_minutes": candidate["shortest_duration_min"] + 10 + 60,
                         "merchant": _merchant_summary(cursor, candidate, radius_m),
                     })
                 scenario_results.append({
@@ -152,7 +169,11 @@ def validate(config_path: Path = DEFAULT_SCENARIOS) -> dict[str, Any]:
                     "input": scenario,
                     "active_candidate_count": len(candidates),
                     "has_direct_route": bool(candidates),
-                    "time_filter": "not_machine_verifiable_from_schedule_text",
+                    "time_filter": {
+                        "available_minutes": available_minutes,
+                        "rule": "shortest_duration_min + 10 minute buffer + 60 minute activity stay",
+                        "venue_opening_hours": "not_machine_verifiable_from_schedule_text",
+                    },
                     "candidates": candidate_details,
                     "passes_minimum_candidates": len(candidates) >= 3,
                 })
