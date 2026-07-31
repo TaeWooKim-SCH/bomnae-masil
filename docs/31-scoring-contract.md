@@ -116,15 +116,17 @@ class ScoreResult(TypedDict):
 
 ```sql
 -- 정류장을 직접 선택한 경우
-SELECT *
+SELECT accessibility_scores.*, bus_stops.name AS board_stop_name
 FROM accessibility_scores
+JOIN bus_stops ON bus_stops.stop_id = accessibility_scores.board_stop_id
 WHERE activity_id = :activity_id
   AND board_stop_id = :stop_id
   AND no_transfer = true;
 
 -- 동만 선택한 경우: 해당 활동에 가장 좋은 정류장 한 곳을 대표로 쓴다.
-SELECT *
+SELECT accessibility_scores.*, bus_stops.name AS board_stop_name
 FROM accessibility_scores
+JOIN bus_stops ON bus_stops.stop_id = accessibility_scores.board_stop_id
 WHERE activity_id = :activity_id
   AND zone_code = :zone_code
   AND no_transfer = true
@@ -133,8 +135,13 @@ LIMIT 1;
 ```
 
 - 두 조회 모두 표를 한 번만 읽고, 추천 시점의 경로 계산은 없다.
+- `board_stop_name`은 `accessibility_scores`에 중복 저장하지 않는다. 위 조회의
+  `bus_stops.name` 조인 결과를 R4가 카드 `route.board_stop_name`에 그대로 넣는다.
+  정류장명은 ID에서 추측하거나 새로 지오코딩하지 않는다.
 - 동 단위 대표 조회의 `board_stop_id`는 API 카드 `refs.board_stop_id`와 화면의
-  “○○ 정류장 기준” 문구 근거다.
+  “○○ 정류장 기준” 문구 근거다. R4는 `origin.stop_id is null`일 때만
+  `basis_note`를 `"{board_stop_name} 정류장 기준"`으로 만들고, 사용자가 정류장을
+  직접 골랐으면 `basis_note`를 null로 둔다.
 - `GET /zones`의 “경로 보유 동”은 `zone_code is not null and no_transfer=true`인
   표 행이 하나 이상인 동만 반환한다.
 
@@ -143,5 +150,6 @@ LIMIT 1;
 - `ScoreResult.breakdown` 필드가 API 계약의 `market/interest/access/time/budget`와
   정확히 일치하는지
 - `route_no`, `stops_count`, `ride_min`, `walk_min`, `no_transfer`만으로 카드의 버스
-  문구를 조립할 수 있는지
+  문구를 조립하고, `board_stop_id → bus_stops.name` 조인으로 `board_stop_name`을
+  얻을 수 있는지
 - 동 단위·정류장 직접 선택이 모두 표 조회만으로 처리되는지
