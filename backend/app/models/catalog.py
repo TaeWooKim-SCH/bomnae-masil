@@ -61,6 +61,10 @@ class Activity(Base):
     needs_geocode: Mapped[bool] = mapped_column(Boolean, nullable=False)
     source_url: Mapped[str] = mapped_column(Text, nullable=False)
     poster_url: Mapped[str | None] = mapped_column(Text)
+    # 관심사 칩 매핑(#48, R3 요청 — R3-07): 세미콜론 구분 문자열, 7종 칩만
+    # (운동·건강/문화·공연/공예·만들기/사진·미디어/요리·먹거리/학습·어학/자연·나들이).
+    # 매핑 안 된 활동은 null 또는 빈 값
+    interest_tags: Mapped[str | None] = mapped_column(Text)
 
 
 class Merchant(Base):
