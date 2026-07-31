@@ -164,8 +164,11 @@ QuestCard 전체 + 지도용 좌표 + 상태:
 ```json
 응답 200 {"records": [{"record_id":"rec_77","quest_id":"q_301","title":"…","tags":["…"],
                       "created_at":"2026-08-01T17:40:00","verified":true}],
-         "balance": 100, "titles": ["봄내 첫걸음"]}
+         "balance": 100, "titles": ["봄내 첫걸음"],
+         "zone_map": {"collected": ["4211056000"], "available": ["4211056000", "4211057000"]}}
 ```
+
+**zone_map** (8/1 동결 후 결정자 승인 추가 — #101 조각지도): `collected` = 완주한 퀘스트 활동지의 행정동, `available` = 활동이 1건 이상 있는 동. 지오메트리는 별도 API 없이 **대시보드 접근성 GeoJSON을 재사용**하고, 잠금 동 = GeoJSON에는 있으나 available에 없는 동. 수집 칭호(5동·10동·전판)는 titles 배열로 합류한다. 구현: #99(서버)·#100(화면).
 
 ## 6. 대시보드 (인증 불필요 — 데모 공개)
 
