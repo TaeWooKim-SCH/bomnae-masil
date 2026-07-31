@@ -12,6 +12,11 @@ const NAVY = "#0B3A52";
 const SUB = "#5E6B72";
 const FAINT = "#93A0A8";
 
+// 도심 수집판 14개 동 (design/prototype.html v4 확정 — 외곽 읍·면·신사우동은 '준비 중')
+const CORE_DONGS = ["교동", "근화동", "소양동", "약사명동", "조운동", "효자1동", "효자2동", "효자3동", "후평1동", "후평2동", "후평3동", "석사동", "퇴계동", "강남동"];
+const dongName = (f) => (f.properties?.name ?? "").split(" ").pop();
+const isCore = (f) => CORE_DONGS.includes(dongName(f));
+
 const MILESTONES = [
   { at: 5, label: "동네 수집가" },
   { at: 10, label: "골목 탐험가" },
@@ -71,8 +76,7 @@ function makeProjector(featureList, w = 360, h = 300, pad = 10) {
 function stateOf(feature, zoneMap) {
   const code = feature.properties?.zone_code;
   if (zoneMap.collected.includes(code)) return "filled";
-  if (zoneMap.available.includes(code)) return "open";
-  return "locked";
+  return isCore(feature) ? "open" : "locked";
 }
 
 const PIECE_STYLE = {
@@ -81,7 +85,7 @@ const PIECE_STYLE = {
   locked: { fill: "url(#collectionHatch)", stroke: "#D3DDE2", dash: "none", label: "#8A96A0" },
 };
 
-function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon }) {
+function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLabels }) {
   const projector = React.useMemo(() => makeProjector(featureList), [featureList]);
   if (!projector) {
     return <div style={{ padding: "36px 0", textAlign: "center", font: `500 12px Pretendard,sans-serif`, color: FAINT }}>지도를 준비하고 있어요</div>;
@@ -107,14 +111,16 @@ function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon }) {
           if (st === "locked" && showLockIcon) {
             return (
               <g key={`lock-${f.properties?.zone_code}`} transform={`translate(${cx},${cy})`} pointerEvents="none">
-                <rect x="-5" y="-3" width="10" height="8" rx="2" fill={FAINT} />
-                <path d="M-3,-3 v-2 a3,3 0 0 1 6,0 v2" stroke={FAINT} strokeWidth="1.8" fill="none" />
+                <rect x="-5" y="-6" width="10" height="8" rx="2" fill={FAINT} />
+                <path d="M-3,-6 v-2 a3,3 0 0 1 6,0 v2" stroke={FAINT} strokeWidth="1.8" fill="none" />
+                <text x="0" y="14" textAnchor="middle" style={{ font: "600 9px Pretendard,sans-serif", fill: "#8A96A0" }}>{dongName(f)}</text>
               </g>
             );
           }
+          if (hideCoreLabels) return null;
           return (
             <text key={`label-${f.properties?.zone_code}`} x={cx} y={cy} textAnchor="middle" pointerEvents="none" style={{ font: "700 9px Pretendard,sans-serif", fill: PIECE_STYLE[st].label }}>
-              {(f.properties?.name ?? "").split(" ").pop()}
+              {dongName(f)}
             </text>
           );
         })}
@@ -123,10 +129,15 @@ function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon }) {
   );
 }
 
+function coreProgress(zoneMap, features) {
+  const coreCodes = features.filter(isCore).map((f) => f.properties?.zone_code);
+  const n = zoneMap.collected.filter((c) => coreCodes.includes(c)).length;
+  return { n, m: coreCodes.length || CORE_DONGS.length };
+}
+
 export function CollectionCard({ onOpen }) {
-  const { zoneMap } = useCollection();
-  const n = zoneMap.collected.length;
-  const m = zoneMap.available.length;
+  const { zoneMap, features } = useCollection();
+  const { n, m } = coreProgress(zoneMap, features);
   const squares = Array.from({ length: 10 }, (_, i) => (m > 0 && i < Math.round((n / m) * 10) ? BLUE : "#EAF0F3"));
   const hint = m > 0 && n >= m ? "완성! 리워드를 확인하세요" : "동 조각을 모아 춘천을 완성해 보세요";
   return (
@@ -150,10 +161,9 @@ export function CollectionCard({ onOpen }) {
 export function CollectionModal({ onClose }) {
   const { zoneMap, features } = useCollection();
   const [notice, setNotice] = React.useState("");
-  const n = zoneMap.collected.length;
-  const m = zoneMap.available.length;
+  const { n, m } = coreProgress(zoneMap, features);
   const complete = m > 0 && n >= m;
-  const activeFeatures = features.filter((f) => stateOf(f, zoneMap) !== "locked");
+  const coreFeatures = features.filter(isCore);
   const lockedTap = () => {
     setNotice("아직 준비 중인 동네예요");
     window.setTimeout(() => setNotice(""), 1800);
@@ -180,15 +190,15 @@ export function CollectionModal({ onClose }) {
         </div>
 
         <div style={{ position: "relative", marginTop: 14, background: "#F7FAFB", border: "1px solid #EAF0F3", borderRadius: 14, overflow: "hidden" }}>
-          <PieceSvg featureList={activeFeatures} zoneMap={zoneMap} />
-          <div style={{ position: "absolute", top: 10, left: 12, background: "rgba(255,255,255,.92)", borderRadius: 8, padding: "4px 9px", font: "700 10.5px Pretendard,sans-serif", color: NAVY }}>조각을 모으는 동네</div>
+          <PieceSvg featureList={coreFeatures} zoneMap={zoneMap} />
+          <div style={{ position: "absolute", top: 10, left: 12, background: "rgba(255,255,255,.92)", borderRadius: 8, padding: "4px 9px", font: "700 10.5px Pretendard,sans-serif", color: NAVY }}>도심 — 조각을 모으는 동네</div>
         </div>
 
         <div style={{ font: "700 12px Pretendard,sans-serif", color: "#7A8790", marginTop: 14 }}>
-          춘천시 전체 <span style={{ fontWeight: 500, color: FAINT }}>— 실제 행정동 경계 · 일부 동네는 준비 중</span>
+          춘천시 전체 <span style={{ fontWeight: 500, color: FAINT }}>— 실제 행정동 경계 · 외곽은 준비 중</span>
         </div>
         <div style={{ marginTop: 6 }}>
-          <PieceSvg featureList={features} zoneMap={zoneMap} onLockedTap={lockedTap} showLockIcon />
+          <PieceSvg featureList={features} zoneMap={zoneMap} onLockedTap={lockedTap} showLockIcon hideCoreLabels />
         </div>
 
         <div style={{ display: "flex", gap: 12, marginTop: 8, justifyContent: "center" }}>
@@ -216,7 +226,7 @@ export function CollectionModal({ onClose }) {
           </div>
         ) : (
           <div style={{ marginTop: 14, background: "#E7F3FA", borderRadius: 12, padding: "12px 14px", font: "500 12px/1.55 Pretendard,sans-serif", color: "#2A5670" }}>
-            {m || "—"}개 동을 모두 모으면 <b>춘천사랑상품권 5,000원</b>을 신청할 수 있어요. 나머지 동네는 준비 중이에요.
+            도심 {m || "—"}개 동을 모두 모으면 <b>춘천사랑상품권 5,000원</b>을 신청할 수 있어요. 외곽 읍·면 지역은 준비 중이에요.
           </div>
         )}
 
