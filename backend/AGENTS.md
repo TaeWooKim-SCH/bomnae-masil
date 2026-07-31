@@ -13,5 +13,5 @@
 ## 환경 (전원 공통)
 
 - 파이썬 **3.11**(루트 `.python-version`) — 레포 루트의 `.venv` 하나를 backend·pipeline이 같이 쓴다. 셋업은 루트 README, 가상환경·캐시는 커밋하지 않는다
-- 의존성 파일은 둘: `backend/requirements.txt`(서버 런타임 — Cloudtype 배포 대상)·`pipeline/requirements.txt`(로컬 배치 전용), 둘 다 `~=` 핀. 루트 `requirements.lock.txt`가 있으면 **전원 lock으로 설치**, lock 갱신은 R2만
+- 의존성 파일은 둘: `backend/requirements.txt`(서버 런타임 — Cloudtype 배포 대상)·`pipeline/requirements.txt`(로컬 배치 전용), 둘 다 `~=` 핀. 루트 `requirements.lock.txt`가 있으면 **전원 lock으로 설치**, lock 갱신은 R2만(갱신 명령은 backend/requirements.txt 머리주석 — uvloop Windows 제외 마커 유지 필수)
 - `.env`는 `backend/.env.example`을 복사해 만들고 실제 값(DATABASE_URL·API 키)은 팀 비밀 저장소에서 받는다 — 커밋 절대 금지(공개 레포)

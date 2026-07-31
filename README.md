@@ -29,7 +29,7 @@ docs/       설계 문서
 ## 부팅 (각 폴더 README에 1줄씩 유지 — 백업 페어 인수 조건)
 
 - frontend: `cd frontend && npm i && npm run dev`
-- 파이썬 공통(최초 1회): `python -m venv .venv && source .venv/bin/activate && pip install -r backend/requirements.txt -r pipeline/requirements.txt` — 이후 매 세션 `source .venv/bin/activate`
+- 파이썬 공통(최초 1회): `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.lock.txt` — Windows는 activate 대신 `.venv\Scripts\activate`. lock이 없을 때만 `pip install -r backend/requirements.txt -r pipeline/requirements.txt`. 이후 매 세션 activate만
 - backend: `cd backend && uvicorn app.main:app --reload`
 - pipeline: `cd pipeline && python -m load.run_all`
 - 오프라인 스택: `docker compose up`
