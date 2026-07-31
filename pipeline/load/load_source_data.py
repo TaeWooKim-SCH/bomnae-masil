@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 from .common import in_chuncheon_bounds, output_dir, valid_wgs84
+from .accessibility_scores import _load_zones, _zone_for_stop
 
 ACTIVITY_COLUMNS = (
     "activity_id", "source_event_id", "name", "type", "status", "genre",
@@ -20,6 +21,7 @@ ACTIVITY_COLUMNS = (
     "needs_geocode", "source_url", "poster_url",
 )
 INTEREST_TAGS_COLUMN = "interest_tags"
+ACTIVITY_ZONE_COLUMN = "zone_code"
 INTERESTS = {"운동·건강", "문화·공연", "공예·만들기", "사진·미디어", "요리·먹거리", "학습·어학", "자연·나들이"}
 MERCHANT_COLUMNS = (
     "merchant_id", "source_merchant_id", "name", "category", "category_detail",
@@ -104,6 +106,7 @@ def _activity_rows() -> list[dict[str, str]]:
         ("activity_id", "name", "type", "place_name", "latitude", "longitude", "price_krw", "schedule_text", "source"),
     )
     rows: list[dict[str, str]] = []
+    zones = _load_zones()
     seen: set[str] = set()
     for row in culture:
         _coordinates(row, row["activity_id"])
@@ -115,6 +118,7 @@ def _activity_rows() -> list[dict[str, str]]:
             raise ValueError(f"{row['activity_id']}: geocoded activity is still unresolved")
         converted = {column: row.get(column, "") for column in ACTIVITY_COLUMNS}
         converted[INTEREST_TAGS_COLUMN] = _interest_tags(row.get(INTEREST_TAGS_COLUMN, ""), row["activity_id"])
+        converted[ACTIVITY_ZONE_COLUMN] = _zone_for_stop(float(row["longitude"]), float(row["latitude"]), zones)
         rows.append(converted)
         seen.add(row["activity_id"])
     for seed in seeds:
@@ -145,12 +149,13 @@ def _activity_rows() -> list[dict[str, str]]:
             INTEREST_TAGS_COLUMN: _interest_tags(seed.get(INTEREST_TAGS_COLUMN, ""), activity_id, required=True),
         }
         _coordinates(converted, activity_id)
+        converted[ACTIVITY_ZONE_COLUMN] = _zone_for_stop(float(converted["longitude"]), float(converted["latitude"]), zones)
         rows.append(converted)
         seen.add(activity_id)
     return rows
 
 
-def _table_rows(include_interest_tags: bool = False) -> dict[str, tuple[tuple[str, ...], list[dict[str, str]]]]:
+def _table_rows(include_interest_tags: bool = False, include_zone_code: bool = False) -> dict[str, tuple[tuple[str, ...], list[dict[str, str]]]]:
     merchants = _read_rows("merchants.csv", MERCHANT_COLUMNS)
     for row in merchants:
         _coordinates(row, row["merchant_id"])
@@ -166,7 +171,7 @@ def _table_rows(include_interest_tags: bool = False) -> dict[str, tuple[tuple[st
         if len(row["month"]) == 7:
             row["month"] = f"{row['month']}-01"
     return {
-        "activities": (ACTIVITY_COLUMNS + ((INTEREST_TAGS_COLUMN,) if include_interest_tags else ()), _activity_rows()),
+        "activities": (ACTIVITY_COLUMNS + ((INTEREST_TAGS_COLUMN,) if include_interest_tags else ()) + ((ACTIVITY_ZONE_COLUMN,) if include_zone_code else ()), _activity_rows()),
         "merchants": (MERCHANT_COLUMNS, merchants),
         "stop_routes": (STOP_ROUTE_COLUMNS, routes),
         "floating_population": (FLOATING_POPULATION_COLUMNS, floating),
@@ -212,7 +217,7 @@ def load() -> dict[str, int]:
 
     with psycopg2.connect(database_url()) as connection:
         with connection.cursor() as cursor:
-            tables = _table_rows(include_interest_tags=_has_column(cursor, "activities", INTEREST_TAGS_COLUMN))
+            tables = _table_rows(include_interest_tags=_has_column(cursor, "activities", INTEREST_TAGS_COLUMN), include_zone_code=_has_column(cursor, "activities", ACTIVITY_ZONE_COLUMN))
             expected = {table: len(rows) for table, (_, rows) in tables.items()}
             for table, (columns, rows) in tables.items():
                 _require_columns(cursor, table, columns)
