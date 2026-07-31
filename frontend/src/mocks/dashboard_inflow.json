@@ -1,0 +1,8 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "name": "육림고개 ○○카페", "category": "카페", "inflow_status": "확정저유입" }, "geometry": { "type": "Point", "coordinates": [127.7269, 37.8801] } },
+    { "type": "Feature", "properties": { "name": "약사천 △△공방", "category": "공예", "inflow_status": "추정후보" }, "geometry": { "type": "Point", "coordinates": [127.7241, 37.8772] } },
+    { "type": "Feature", "properties": { "name": "명동 □□식당", "category": "일반음식점", "inflow_status": "붐빔" }, "geometry": { "type": "Point", "coordinates": [127.7302, 37.8825] } }
+  ]
+}
