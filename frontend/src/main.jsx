@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Html5Qrcode } from "html5-qrcode";
 import { api } from "./api/client";
 import "./styles.css";
 
@@ -44,6 +45,27 @@ function AppHeader({ balance, titles, health }) {
       </div>
     </header>
   );
+}
+
+function NavIcon({ name }) {
+  const paths = {
+    home: <><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z" /></>,
+    quest: <><path d="M12 21s7-5.1 7-11A7 7 0 1 0 5 10c0 5.9 7 11 7 11Z" /><circle cx="12" cy="10" r="2.4" /></>,
+    archive: <path d="M5 3h14a1 1 0 0 1 1 1v17l-8-4-8 4V4a1 1 0 0 1 1-1Z" />,
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
+}
+
+function QrMark() {
+  return <svg className="qr-mark" viewBox="0 0 96 96" aria-hidden="true">
+    <g fill="none" stroke="currentColor" strokeWidth="8"><rect x="6" y="6" width="28" height="28" rx="2" /><rect x="62" y="6" width="28" height="28" rx="2" /><rect x="6" y="62" width="28" height="28" rx="2" /></g>
+    <g fill="currentColor"><rect x="15" y="15" width="10" height="10" /><rect x="71" y="15" width="10" height="10" /><rect x="15" y="71" width="10" height="10" /><rect x="43" y="43" width="10" height="10" /><rect x="57" y="43" width="9" height="9" /><rect x="43" y="57" width="9" height="9" /><rect x="57" y="59" width="16" height="9" /><rect x="76" y="45" width="10" height="23" /><rect x="43" y="75" width="10" height="10" /><rect x="60" y="76" width="25" height="9" /></g>
+  </svg>;
+}
+
+function BottomNav({ active = "home" }) {
+  const navigate = useNavigate();
+  return <nav className="bottom-nav" aria-label="주요 메뉴"><button className={active === "home" ? "active" : ""} onClick={() => navigate("/")}><NavIcon name="home" />홈</button><button className={active === "quest" ? "active" : ""} onClick={() => navigate("/recommend")}><NavIcon name="quest" />퀘스트</button><button className={active === "archive" ? "active" : ""} onClick={() => navigate("/records")}><NavIcon name="archive" />보관함</button></nav>;
 }
 
 function AgeGate({ onConfirm, submitting, error }) {
@@ -355,6 +377,7 @@ function Home() {
           {!isFormComplete && <p className="validation-hint">{customBudgetMode ? "추천 예산 구간을 선택해 주세요." : "관심사, 출발 동네, 이용 시간, 예산을 모두 선택해 주세요."}</p>}
         </section>
       </div>
+      <BottomNav active="home" />
       {showGate && <AgeGate onConfirm={createSession} submitting={sessionLoading} error={sessionError} />}
     </main>
   );
@@ -362,7 +385,7 @@ function Home() {
 
 function PendingScreen({ title, description }) {
   const navigate = useNavigate();
-  return <main className="app-shell pending-screen"><AppHeader balance={0} titles={[]} health={null} /><section><p className="eyebrow">봄내마실</p><h1>{title}</h1><p>{description}</p><button className="primary-button" type="button" onClick={() => navigate("/")}>홈으로 돌아가기</button></section></main>;
+  return <main className="app-shell pending-screen"><AppHeader balance={0} titles={[]} health={null} /><section><p className="eyebrow">봄내마실</p><h1>{title}</h1><p>{description}</p><button className="primary-button" type="button" onClick={() => navigate("/")}>홈으로 돌아가기</button></section><BottomNav /></main>;
 }
 
 const SCORE_ITEMS = [
@@ -547,7 +570,84 @@ function QuestDetail() {
       {!started ? <button className="primary-button detail-start" type="button" onClick={() => startQuest()} disabled={starting}>{starting ? "시작하는 중..." : "퀘스트 시작"}</button> : <div className="started-actions">{hasMission && <button type="button" onClick={() => navigate(`/verify/${quest.quest_id}`)}>인증하러 가기</button>}<button type="button" onClick={() => navigate(`/records/${quest.quest_id}`)}>기록 쓰기</button></div>}
     </section>
     {startConflict && <div className="modal-backdrop detail-conflict"><section className="start-conflict" role="dialog" aria-modal="true" aria-labelledby="start-conflict-title"><h2 id="start-conflict-title">진행 중인 퀘스트가 있어요</h2><p>새로 시작하면 기존 퀘스트는 중단돼요.</p><div><button type="button" onClick={() => setStartConflict(false)}>돌아가기</button><button type="button" onClick={() => { setStartConflict(false); startQuest(true); }}>새 퀘스트 시작</button></div></section></div>}
+    <BottomNav active="quest" />
   </main>;
+}
+
+function VerificationResultModal({ result, onRecord, onLater }) {
+  const isAlready = Boolean(result.already);
+  return <div className="verify-completion-backdrop" role="dialog" aria-modal="true" aria-labelledby="verify-completion-title">
+    <section className="verify-completion-card">
+      <div className="mission-stamp" aria-hidden="true"><small>봄내마실</small><strong>미션 완료</strong><em>{DEMO_DATE.replaceAll("-", ".")}</em></div>
+      <h1 id="verify-completion-title">{isAlready ? "이미 적립된 퀘스트예요" : <>스탬프 획득! <b>+{result.points_added}P</b></>}</h1>
+      <p>{isAlready ? "이미 방문 인증이 기록되어 있어요." : "카페 소양담 (육림고개) 방문이 기록됐어요."}<br />기록까지 남기면 완주 보너스 +20P!</p>
+      <button className="primary-button" type="button" onClick={onRecord}>기록 남기기</button>
+      <button className="completion-later" type="button" onClick={onLater}>나중에 할게요</button>
+    </section>
+  </div>;
+}
+
+function VerifyScreen() {
+  const { questId } = useParams();
+  const navigate = useNavigate();
+  const [method, setMethod] = React.useState("qr");
+  const [code, setCode] = React.useState("");
+  const [amount, setAmount] = React.useState("");
+  const [receiptName, setReceiptName] = React.useState("");
+  const [result, setResult] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [scanning, setScanning] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!scanning) return undefined;
+    const scanner = new Html5Qrcode("verify-qr-reader");
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 210, height: 210 } },
+      (text) => {
+        let scannedCode = "";
+        try { const payload = new URL(text); scannedCode = payload.searchParams.get("c") ?? ""; } catch { scannedCode = text.slice(-4); }
+        setCode(scannedCode);
+        setScanning(false);
+        verifyCode(scannedCode);
+      },
+      () => {},
+    ).catch(() => {
+      setScanning(false);
+      setError("카메라를 열 수 없어요. 4자리 코드로 인증해 주세요.");
+    });
+    return () => { scanner.stop().catch(() => {}); };
+  }, [scanning]);
+
+  React.useEffect(() => {
+    if (!result) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [result]);
+
+  async function verifyCode(value) {
+    if (value.length !== 4) { setError("QR 코드를 다시 비춰 주세요."); return; }
+    const scenario = value === "0000" ? "already" : value !== "0417" ? "fail" : "success";
+    try {
+      const response = await api.verifyQuest(questId, { method: "code", code: value }, scenario);
+      setResult(response);
+    } catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
+  }
+
+  async function verify() {
+    setError("");
+    if (method === "qr") { setError("QR 스캔을 먼저 완료해 주세요."); return; }
+    if (method === "receipt" && (!receiptName || !amount || Number(amount) < 1000 || Number(amount) > 200000)) { setError("금액을 확인해 주세요 (1,000~200,000원)"); return; }
+    if (method === "code" && code.length !== 4) { setError("4자리 코드를 입력해 주세요."); return; }
+    if (method === "code") { await verifyCode(code); return; }
+    try { const response = await api.verifyQuest(questId, { method: "receipt", amount_krw: Number(amount) }, "success"); setResult(response); }
+    catch (requestError) { setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); }
+  }
+
+  const codeTap = (key) => setCode((v) => key === "del" ? v.slice(0,-1) : v.length < 4 ? v + key : v);
+  const formattedAmount = amount ? Number(amount).toLocaleString("ko-KR") : "";
+  return <main className={`app-shell verify-page${result ? " is-complete" : ""}`}><section className="verify-content"><header className="verify-head"><button onClick={() => navigate(-1)}>‹</button><h1>가게 미션 인증</h1><b>40P</b></header><div className="merchant-card"><small>미션 장소</small><strong>카페 소양담 (육림고개)</strong><p>전시 보고 나와서, 필름 감성 그대로 따뜻한 한 잔 어때요?</p></div><p className="verify-done">이미 적립된 퀘스트예요 — 기록만 남기면 완주!</p><div className="verify-tabs">{[["qr","QR 스캔"],["code","4자리 코드"],["receipt","영수증"]].map(([key,label]) => <button key={key} className={method===key?"selected":""} onClick={() => { setMethod(key); setError(""); }}>{label}</button>)}</div>{method === "qr" && <div className="verify-panel qr-panel"><div className={`qr-frame${scanning ? " scanning" : ""}`}>{scanning ? <div id="verify-qr-reader" /> : <><QrMark /><p>가게의 QR 스탠드를 비춰주세요</p></>}</div>{!scanning && <button className="scan-button" onClick={() => setScanning(true)}>QR 스캔 시작</button>}<p>카메라가 안 되면 4자리 코드 탭을 이용해 주세요</p></div>}{method === "code" && <div className="verify-panel code-panel"><p>QR 스탠드 아래 적힌 4자리 숫자를 입력해 주세요</p><div className="code-boxes">{[0,1,2,3].map(i=><i key={i}>{code[i]||""}</i>)}</div><div className="keypad">{["1","2","3","4","5","6","7","8","9","","0","del"].map(k=><button key={k} disabled={!k} onClick={()=>codeTap(k)}>{k==="del"?"⌫":k}</button>)}</div></div>}{method === "receipt" && <div className="verify-panel receipt-panel"><p>협약이 안 된 가게도 괜찮아요. 영수증 사진과 금액만 있으면 미션 완료!</p><label className="receipt-upload"><b>＋</b>영수증 사진 찍기 / 올리기<input type="file" accept="image/*" onChange={(e)=>setReceiptName(e.target.files?.[0]?.name??"")} /></label><small>사진은 저장되지 않아요 — 확인 후 바로 폐기돼요</small><input className="receipt-amount" inputMode="numeric" value={formattedAmount} onChange={(e)=>setAmount(e.target.value.replace(/\D/g,""))} placeholder="결제 금액 (1,000~200,000원)" /></div>}{error && <p className="form-error">{error}</p>}<button className="primary-button verify-submit" onClick={verify}>{method==="receipt"?"소비 인증하기":"인증하고 +40P 받기"}</button><button className="text-action record-without" onClick={() => navigate(`/records/${questId}`)}>인증 없이 기록만 남길래요</button></section><BottomNav active="quest" />{result && <VerificationResultModal result={result} onRecord={() => navigate(`/records/${questId}`)} onLater={() => setResult(null)} />}</main>;
 }
 
 function RecommendHandoff() {
@@ -587,6 +687,7 @@ function RecommendHandoff() {
           </>
         )}
       </div>
+      <BottomNav active="quest" />
     </main>
   );
 }
@@ -596,8 +697,9 @@ function RouterApp() {
     <Route path="/" element={<Home />} />
     <Route path="/recommend" element={<RecommendHandoff />} />
     <Route path="/quests/:questId" element={<QuestDetail />} />
-    <Route path="/verify/:questId" element={<PendingScreen title="인증을 준비하고 있어요" description="인증 화면에서 퀘스트를 확인해 주세요." />} />
+    <Route path="/verify/:questId" element={<VerifyScreen />} />
     <Route path="/records/:questId" element={<PendingScreen title="기록을 남겨볼까요?" description="기록 화면에서 오늘의 경험을 완성해 보세요." />} />
+    <Route path="/records" element={<PendingScreen title="기록 보관함" description="저장한 코스와 기록을 준비하고 있어요." />} />
     <Route path="*" element={<Home />} />
   </Routes>;
 }
