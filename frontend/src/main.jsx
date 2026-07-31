@@ -106,6 +106,45 @@ function QrMark() {
   </svg>;
 }
 
+// 진행 중(started·stamped) 퀘스트를 어느 화면에서나 알려주는 미니 바 (#100 후속).
+// 화면을 가두지 않으면서 "퀘스트를 놓치지 않는다"를 만든다 — 보관함·삭제·갈아타기 경로는 그대로 열려 있다.
+function useActiveQuest() {
+  const { pathname } = useLocation();
+  const [quest, setQuest] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    const questId = localStorage.getItem("active_quest_id");
+    if (!questId || !localStorage.getItem("session_id")) { setQuest(null); return undefined; }
+    api.getQuest(questId)
+      .then((data) => { if (alive) setQuest(data.status === "started" || data.status === "stamped" ? data : null); })
+      .catch(() => { if (alive) setQuest(null); });
+    return () => { alive = false; };
+  }, [pathname]);
+  return quest;
+}
+
+function QuestMiniBar() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const quest = useActiveQuest();
+  if (!quest) return null;
+  // 이미 그 퀘스트의 화면(상세·인증·기록)에 있으면 중복이라 숨긴다
+  const own = [`/quests/${quest.quest_id}`, `/verify/${quest.quest_id}`, `/records/${quest.quest_id}`];
+  if (own.includes(pathname)) return null;
+  const stamped = quest.status === "stamped";
+  const target = stamped ? `/records/${quest.quest_id}` : `/quests/${quest.quest_id}`;
+  return (
+    <button className="quest-mini-bar" type="button" onClick={() => navigate(target)}>
+      <span className="mini-dot" aria-hidden="true" />
+      <span className="mini-text">
+        <strong>{stamped ? "기록만 남기면 완주예요 (+60점)" : "진행 중"} · {quest.title}</strong>
+        <small>{stamped ? "기록을 남기고 오늘의 경험을 완성해 보세요" : `${quest.route.route_no}번 · ${quest.activity.place_name}`}</small>
+      </span>
+      <span className="mini-arrow" aria-hidden="true">›</span>
+    </button>
+  );
+}
+
 function BottomNav({ active }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -123,7 +162,7 @@ function BottomNav({ active }) {
     }
     navigate("/recommend");
   }
-  return <nav className="bottom-nav" aria-label="주요 메뉴"><button className={current === "home" ? "active" : ""} onClick={() => navigate("/")}><NavIcon name="home" />홈</button><button className={current === "quest" ? "active" : ""} onClick={goQuestTab}><NavIcon name="quest" />퀘스트</button><button className={current === "archive" ? "active" : ""} onClick={() => navigate("/records")}><NavIcon name="archive" />보관함</button></nav>;
+  return <><QuestMiniBar /><nav className="bottom-nav" aria-label="주요 메뉴"><button className={current === "home" ? "active" : ""} onClick={() => navigate("/")}><NavIcon name="home" />홈</button><button className={current === "quest" ? "active" : ""} onClick={goQuestTab}><NavIcon name="quest" />퀘스트</button><button className={current === "archive" ? "active" : ""} onClick={() => navigate("/records")}><NavIcon name="archive" />보관함</button></nav></>;
 }
 
 function AgeGate({ onConfirm, submitting, error }) {
@@ -170,21 +209,6 @@ function AgeGate({ onConfirm, submitting, error }) {
   );
 }
 
-function ContinueBanner({ activeQuest, onNavigate }) {
-  if (!activeQuest) return null;
-  const stamped = activeQuest.status === "stamped";
-  return (
-    <button className="continue-banner" type="button" onClick={() => onNavigate(stamped ? `/records/${activeQuest.quest_id}` : `/quests/${activeQuest.quest_id}`)}>
-      <span className="continue-icon" aria-hidden="true">↗</span>
-      <span>
-        <strong>{stamped ? "기록만 남기면 완주예요 (+60점)" : "진행 중인 퀘스트가 있어요"}</strong>
-        <small>{stamped ? "기록을 남기고 오늘의 경험을 완성해 보세요" : "이어서 봄내마실을 즐겨 보세요"}</small>
-      </span>
-      <span aria-hidden="true">›</span>
-    </button>
-  );
-}
-
 function Home() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -200,7 +224,6 @@ function Home() {
   const [titles, setTitles] = React.useState([]);
   const [nickname, setNickname] = React.useState("");
   const [health, setHealth] = React.useState(null);
-  const [activeQuest, setActiveQuest] = React.useState(null);
   // "조건 다시 고르기"·빈 결과 [조건 바꾸기]·탭 복귀 모두에서 지난 입력을 복원한다 (25-screens 2장 "입력값 유지")
   const storedSnapshot = React.useMemo(() => loadRecoSnapshot(), []);
   const initialRequest = React.useMemo(
@@ -243,22 +266,6 @@ function Home() {
         }
       });
   }, [isReturningSession]);
-
-  React.useEffect(() => {
-    const questId = localStorage.getItem("active_quest_id");
-    if (!questId || showGate) {
-      setActiveQuest(null);
-      return;
-    }
-    api.getQuest(questId)
-      .then((quest) => setActiveQuest(quest.status === "started" || quest.status === "stamped" ? quest : null))
-      .catch((error) => {
-        if (isSessionMissing(error)) {
-          setIsReturningSession(false);
-          setShowGate(true);
-        }
-      });
-  }, [showGate]);
 
   React.useEffect(() => {
     if (!zoneCode) {
@@ -363,7 +370,6 @@ function Home() {
         <CollectionCard onOpen={() => setCollectionOpen(true)} />
         {collectionOpen && <CollectionModal onClose={() => setCollectionOpen(false)} />}
 
-        <ContinueBanner activeQuest={activeQuest} onNavigate={navigate} />
         {quickStart && (
           <section className="quick-start" aria-label="지난 추천 조건">
             <p>지난번 조건 그대로</p>
