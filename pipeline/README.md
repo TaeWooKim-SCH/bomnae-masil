@@ -73,3 +73,14 @@ WHERE activity_id = :activity_id AND zone_code = :zone_code AND no_transfer = tr
 ORDER BY score DESC, duration_min ASC
 LIMIT 1;
 ```
+
+R2가 동결 계약대로 테이블을 만든 뒤에는 아래 명령으로 DB 적재를 실행한다. 적재기는
+CSV 계약·복합 키를 먼저 검사하고, 임시 테이블에서 행 수를 검증한 뒤 한 트랜잭션으로
+기존 점수표를 교체한다.
+
+```powershell
+python -m pipeline.load.load_accessibility_scores --rebuild
+```
+
+`DATABASE_URL`은 `backend/.env` 또는 실행 환경에만 둔다. 실제 접속값·생성된 CSV는
+Git에 올리지 않는다.
