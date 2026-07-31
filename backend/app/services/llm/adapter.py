@@ -11,7 +11,7 @@ load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 GATEWAY_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway/claude"
 
 
-def generate(prompt: str) -> str | None:
+def generate(prompt: str, max_tokens: int = 300) -> str | None:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     model = os.getenv("LLM_MODEL")
 
@@ -19,10 +19,11 @@ def generate(prompt: str) -> str | None:
         return None
 
     try:
-        client = anthropic.Anthropic(api_key=api_key, base_url=GATEWAY_BASE_URL)
+        base_url = os.getenv("ANTHROPIC_BASE_URL", GATEWAY_BASE_URL)
+        client = anthropic.Anthropic(api_key=api_key, base_url=base_url)
         response = client.messages.create(
             model=model,
-            max_tokens=300,
+            max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text
