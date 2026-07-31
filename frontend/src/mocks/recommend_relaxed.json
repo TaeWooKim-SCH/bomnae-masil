@@ -1,0 +1,19 @@
+{
+  "recommendation_id": "rec_x2",
+  "quests": [
+    {
+      "quest_id": "q_305",
+      "title": "다시 찾는 소양강 저녁 산책",
+      "activity": {"name":"소양강 스카이워크 야간 산책","type":"상시형","place_name":"소양강 스카이워크","schedule_text":"오늘 18:00–21:00","price_krw":0,"d_day":null},
+      "mission": null,
+      "route": {"board_stop_name":"석사동 주민센터","route_no":"12","stops_count":4,"ride_min":15,"walk_min":6,"no_transfer":true,"basis_note":"석사동 주민센터 정류장 기준"},
+      "budget_total_krw":3000,
+      "score": {"total":76,"breakdown":{"market":20,"interest":18,"access":17,"time":13,"budget":8}},
+      "max_points":60,
+      "revisit":true,
+      "refs":{"activity_id":"a_89","board_stop_id":"stp_1042","alight_stop_id":"stp_2211"}
+    }
+  ],
+  "more": [],
+  "relaxed": {"steps":["budget","always_open","revisit"],"message":"조건을 조금 넓혀 찾았어요"}
+}

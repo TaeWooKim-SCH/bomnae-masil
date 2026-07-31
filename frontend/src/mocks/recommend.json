@@ -1,0 +1,56 @@
+{
+  "recommendation_id": "rec_x1",
+  "quests": [
+    {
+      "quest_id": "q_301",
+      "title": "저녁의 필름카메라 입문",
+      "activity": {"name":"필름카메라 입문 강좌","type":"신청형","place_name":"춘천시평생학습관","schedule_text":"오늘 19:00–21:00","price_krw":10000,"d_day":5},
+      "mission": {"merchant_id":"m_12","merchant_name":"육림고개 봄빛카페","copy":"강좌 끝나고 필름 감성 그대로, 따뜻한 한 잔 어때요?","expected_spend_krw":7000},
+      "route": {"board_stop_name":"석사동 현진아파트","route_no":"300","stops_count":7,"ride_min":25,"walk_min":8,"no_transfer":true,"basis_note":"석사동 현진아파트 정류장 기준"},
+      "budget_total_krw":20000,
+      "score": {"total":86,"breakdown":{"market":26,"interest":22,"access":17,"time":13,"budget":8}},
+      "max_points":100,
+      "revisit":false,
+      "refs":{"activity_id":"a_88","board_stop_id":"stp_1041","alight_stop_id":"stp_2210"}
+    },
+    {
+      "quest_id": "q_302",
+      "title": "소양강에서 보내는 가벼운 저녁",
+      "activity": {"name":"소양강 스카이워크 야간 산책","type":"상시형","place_name":"소양강 스카이워크","schedule_text":"오늘 18:00–21:00","price_krw":0,"d_day":null},
+      "mission": null,
+      "route": {"board_stop_name":"석사동 주민센터","route_no":"12","stops_count":4,"ride_min":15,"walk_min":6,"no_transfer":true,"basis_note":null},
+      "budget_total_krw":3000,
+      "score": {"total":81,"breakdown":{"market":20,"interest":20,"access":18,"time":15,"budget":8}},
+      "max_points":60,
+      "revisit":false,
+      "refs":{"activity_id":"a_89","board_stop_id":"stp_1042","alight_stop_id":"stp_2211"}
+    },
+    {
+      "quest_id": "q_303",
+      "title": "주말의 작은 공예 시간",
+      "activity": {"name":"춘천 공예 체험","type":"당일형","place_name":"춘천문화예술회관","schedule_text":"오늘 14:00–16:00","price_krw":5000,"d_day":null},
+      "mission": {"merchant_id":"m_14","merchant_name":"명동 작은책방","copy":"손으로 만든 즐거움을 안고, 골목의 이야기도 한 페이지 만나 보세요.","expected_spend_krw":5000},
+      "route": {"board_stop_name":"석사초등학교","route_no":"200","stops_count":6,"ride_min":20,"walk_min":5,"no_transfer":true,"basis_note":null},
+      "budget_total_krw":13000,
+      "score": {"total":79,"breakdown":{"market":24,"interest":18,"access":15,"time":14,"budget":8}},
+      "max_points":100,
+      "revisit":false,
+      "refs":{"activity_id":"a_90","board_stop_id":"stp_1043","alight_stop_id":"stp_2212"}
+    }
+  ],
+  "more": [
+    {
+      "quest_id": "q_304",
+      "title": "오후의 가벼운 요리 수업",
+      "activity": {"name":"제철 재료 요리 강좌","type":"신청형","place_name":"춘천시평생학습관","schedule_text":"내일 14:00–16:00","price_krw":8000,"d_day":8},
+      "mission": {"merchant_id":"m_15","merchant_name":"중앙시장 반찬가게","copy":"오늘 배운 재료로 다음 한 끼를 상상해 보세요.","expected_spend_krw":6000},
+      "route": {"board_stop_name":"석사동 현진아파트","route_no":"300","stops_count":8,"ride_min":28,"walk_min":7,"no_transfer":true,"basis_note":"석사동 현진아파트 정류장 기준"},
+      "budget_total_krw":17000,
+      "score": {"total":74,"breakdown":{"market":23,"interest":17,"access":14,"time":12,"budget":8}},
+      "max_points":100,
+      "revisit":false,
+      "refs":{"activity_id":"a_91","board_stop_id":"stp_1041","alight_stop_id":"stp_2213"}
+    }
+  ],
+  "relaxed": null
+}
