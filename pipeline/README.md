@@ -116,6 +116,14 @@ python -m pipeline.load.load_accessibility_scores --rebuild
 `DATABASE_URL`은 `backend/.env` 또는 실행 환경에만 둔다. 실제 접속값·생성된 CSV는
 Git에 올리지 않는다.
 
+문화행사 원천 중 좌표가 춘천시 범위 밖인 행은 지오코딩·점수표·DB 적재에서 제외한다.
+이미 적재된 활동 원천만 바로잡아야 할 때는 다른 R3-2 테이블을 재적재하지 않고 아래
+전용 명령을 사용한다.
+
+```powershell
+python -m pipeline.load.load_activities
+```
+
 ## 관심사 칩·행정동 정규화 (#48)
 
 `pipeline/seeds/activity_interest_mapping.csv`는 활동 분류·제목 키워드를 API 계약의
