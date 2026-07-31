@@ -12,13 +12,13 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Protocol
 
+from app.services.scoring import calculate_score
+from app.services.scoring.constants import BUS_ROUND_TRIP_KRW, budget_total_krw, mission_spend_krw
 from app.timebase import now_kst
 
 
 RELAXED_MESSAGE = "조건을 조금 넓혀 찾았어요"
-BUS_FARE_KRW = 3000
 WAIT_BUFFER_MIN = 10
-DEFAULT_STAY_MIN = 60
 
 _OPERATING_HOURS = re.compile(r"(\d{1,2}):(\d{2})\s*[-~–]\s*(\d{1,2}):(\d{2})")
 _RUNTIME_MINUTES = re.compile(r"(\d+)\s*분")
@@ -227,7 +227,7 @@ def build_quests(
     now = current_time or now_kst()
     owns_repository = repository is None
     repository = repository or SqlAlchemyQuestRepository()
-    score_calculator = score_calculator or _r3_score_calculator
+    score_calculator = score_calculator or calculate_score
     try:
         return _build_with_relaxation(user_input, repository, score_calculator, now)
     finally:
@@ -522,20 +522,24 @@ def _is_closed_today(schedule_text: str | None, weekday: int) -> bool:
 
 
 def _expected_spend(merchant: MerchantCandidate) -> int:
-    detail = merchant.category_detail or ""
-    if any(word in detail for word in ("카페", "커피", "비알코올")):
-        return 7000
-    if merchant.category == "음식":
-        return 12000
-    if merchant.category == "소매":
-        return 5000
-    return 8000
+    return mission_spend_krw(_merchant_spend_category(merchant))
 
 
 def _budget_total(activity: ActivityCandidate, merchant: MerchantCandidate | None) -> int:
     if activity.price_krw is None:
         return 10**9
-    return activity.price_krw + (0 if merchant is None else _expected_spend(merchant)) + BUS_FARE_KRW
+    if merchant is None:
+        return activity.price_krw + BUS_ROUND_TRIP_KRW
+    return budget_total_krw(activity.price_krw, _merchant_spend_category(merchant))
+
+
+def _merchant_spend_category(merchant: MerchantCandidate) -> str:
+    """공용 비용표가 이해하는 업종명으로 원천 대분류·상세분류를 정규화한다."""
+
+    detail = merchant.category_detail or ""
+    if any(word in detail for word in ("카페", "커피", "비알코올")):
+        return "카페"
+    return merchant.category
 
 
 def _budget_fit_ratio(budget_total_krw: int, budget_krw: int | None) -> float:
@@ -557,16 +561,6 @@ def _validate_score(score: Mapping[str, object]) -> None:
         raise ValueError("R3 calculate_score returned an invalid score breakdown")
     if score["total"] != sum(breakdown[field] for field in fields):
         raise ValueError("R3 calculate_score total must equal the breakdown sum")
-
-
-def _r3_score_calculator(score_input: dict) -> Mapping[str, object]:
-    """R3 PR이 병합되기 전에는 앱을 깨지 않도록 호출 시점에만 의존성을 확인한다."""
-
-    try:
-        from app.services.scoring import calculate_score
-    except ImportError as error:
-        raise RuntimeError("R3 calculate_score is not available yet") from error
-    return calculate_score(score_input)
 
 
 def _required_mapping(values: Mapping[str, object], key: str) -> Mapping[str, object]:

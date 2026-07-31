@@ -84,6 +84,11 @@ def score(input_value: dict) -> dict:
 
 
 class BuildQuestsTest(unittest.TestCase):
+    def test_package_exports_the_router_contract_function(self) -> None:
+        from app.services.quest_builder import build_quests as public_build_quests
+
+        self.assertIs(public_build_quests, build_quests)
+
     def test_uses_selected_stop_and_builds_a_100_point_card(self) -> None:
         repository = FakeRepository([], [activity("culture")])
 
