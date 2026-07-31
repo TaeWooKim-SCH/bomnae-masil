@@ -6,6 +6,7 @@
 """
 import hashlib
 import logging
+import os
 
 from sqlalchemy import select
 
@@ -19,6 +20,26 @@ def derived_code(merchant_id: str) -> str:
     실데모 가게는 반드시 #47 시드 코드를 쓴다."""
     n = int(hashlib.sha256(merchant_id.encode()).hexdigest()[:8], 16) % 10000
     return f"{n:04d}"
+
+
+# 시연용 마스터 코드 — 인쇄 스탠드가 손에 없어도 스탬프·조각 획득을 보여줄 수 있어야 한다.
+# 가게별 실코드는 그대로 살아 있고 "틀린 코드는 실패"도 유지되므로, 코드 대조 시연이 깨지지 않는다.
+# 끄려면 환경변수 DEMO_VERIFY_CODE=off (또는 빈 값).
+DEFAULT_DEMO_CODE = "9999"
+
+
+def demo_master_code() -> str | None:
+    value = os.environ.get("DEMO_VERIFY_CODE", DEFAULT_DEMO_CODE).strip()
+    return None if value.lower() in ("", "off", "none", "false") else value
+
+
+def code_matches(db, merchant_id: str, code: str) -> bool:
+    """입력 코드가 이 가게의 인증 코드이거나 시연용 마스터 코드면 통과."""
+    master = demo_master_code()
+    if master and code == master:
+        logger.info("시연용 마스터 코드로 인증: %s", merchant_id)
+        return True
+    return code == merchant_verify_code(db, merchant_id)
 
 
 def merchant_verify_code(db, merchant_id: str) -> str:
