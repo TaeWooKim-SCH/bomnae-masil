@@ -7,9 +7,9 @@
 
 - **Base**: `/api` · 본문은 JSON · 시각은 ISO 8601(Asia/Seoul). 서버의 "지금"은 기준 시각 유틸(`DEMO_NOW` 지원)
 - **인증**: 세션 필요 API는 헤더 `Authorization: Bearer <session_id>`. 세션이 서버에 없으면 → `401 {"error":{"code":"SESSION_NOT_FOUND"}}` → 클라이언트는 로컬 키 폐기 + 첫 방문 모달 (25-screens 0장)
-- **에러 형식(공통)**: `{"error":{"code":"<대문자_스네이크>","message":"<사용자에게 그대로 보여줄 한국어>"}}`
-- **balance**: 별도 조회 API 없음 — 세션 생성·인증·기록 저장 응답에 항상 포함 (적립 직후 최신 잔액 보장)
-- **QR 페이로드(#47 동결)**: `<서비스URL>/verify?m=<merchant_id>&c=<4자리코드>` — 클라이언트가 m·c를 파싱해 verify로 전송
+- **에러 형식(공통)**: `{"error":{"code":"<대문자_스네이크>","message":"<사용자에게 그대로 보여줄 한국어>", ...확장 필드}}` — 코드별 확장 필드(예: current_quest_id)는 error 객체 안에 둔다
+- **balance**: 별도 조회 API 없음 — 세션 생성·인증·기록 저장·**보관함(GET /records)** 응답에 항상 포함. **재방문 홈의 잔액·칭호는 GET /records 응답을 사용한다**
+- **QR 페이로드(#47 동결)**: `<서비스URL>/verify?m=<merchant_id>&c=<4자리코드>` — 클라이언트가 m·c를 파싱해 verify로 전송. **딥링크 규칙**: 이 URL로 직접 진입 시 `active_quest_id` 있으면 그 퀘스트로 인증 시도, 없으면 홈으로 보내며 "봄내마실에서 퀘스트를 시작한 뒤 찍어주세요" 안내
 
 ## 1. 세션
 
@@ -103,11 +103,12 @@ QuestCard 전체 + 지도용 좌표 + 상태:
 ```json
 요청  {"abandon_current": false}
 응답 200 {"status": "started", "started_at": "2026-08-01T14:05:00"}
-오류 409 QUEST_IN_PROGRESS {"current_quest_id": "q_299", "message": "진행 중인 퀘스트가 있어요"}
+오류 409 {"error":{"code":"QUEST_IN_PROGRESS","message":"진행 중인 퀘스트가 있어요","current_quest_id":"q_299"}}
       // → 클라이언트가 확인 모달 후 {"abandon_current": true}로 재요청 → 기존 건 abandoned
 ```
 
 ### POST /quests/{quest_id}/verify — 미션 인증 (stamped 전이)
+전제: 해당 퀘스트가 **이 세션의 started 또는 stamped 상태**여야 한다 (아니면 400 QUEST_NOT_STARTED).
 ```json
 요청 (셋 중 하나)
   {"method": "qr",      "merchant_id": "m_12", "code": "4821"}   // QR 파싱 결과
@@ -117,16 +118,21 @@ QuestCard 전체 + 지도용 좌표 + 상태:
          "already": false,                    // 재인증이면 true (에러 아님 — 멱등)
          "points_added": 40, "balance": 40,
          "title_unlocked": null,              // 100점 도달 시 "봄내 첫걸음"
-         "message": "스탬프가 적립됐어요!"}     // already면 "이미 적립된 퀘스트예요"
+         "message": "스탬프가 적립됐어요!"}
+재인증(멱등) 응답 200 {"stamp_type": "visit", "already": true,
+         "points_added": 0, "balance": 40,   // 잔액 변동 없음, title_unlocked는 null 고정
+         "message": "이미 적립된 퀘스트예요"}
 오류 400 WRONG_STORE   "이 퀘스트의 미션 가게는 ○○예요"     // qr의 merchant_id 불일치. 재시도 무제한
      400 INVALID_CODE  "코드를 다시 확인해 주세요"
      400 INVALID_AMOUNT "금액을 확인해 주세요 (1,000~200,000원)"
      400 NO_MISSION    "이 퀘스트는 가게 미션이 없어요 — 기록으로 완주해요"
+     400 QUEST_NOT_STARTED "퀘스트를 먼저 시작해 주세요"
 ```
 
 ## 5. 기록
 
 ### POST /records — 생성과 저장 (한 창구, action으로 구분)
+전제: 해당 퀘스트가 **이 세션의 started 또는 stamped 상태**여야 한다 (recommended → 400 QUEST_NOT_STARTED / 이미 recorded → 409 ALREADY_RECORDED "이미 완주한 퀘스트예요").
 ```json
 생성 요청 {"quest_id": "q_301", "action": "generate",
           "purpose": "hobby",                  // portfolio | hobby | learning (기본 hobby)
@@ -139,12 +145,14 @@ QuestCard 전체 + 지도용 좌표 + 상태:
           "answers": ["새로웠어요", "", ""],
           "final": {"title": "…", "body": "…", "tags": ["…","…","…"]}}   // 사용자가 수정한 최종본
 저장 응답 201 {"record_id": "rec_77",
-             "points_added": 40,              // answers 전부 빈 값이면 0 ("한 가지만 골라주시면 포인트가 적립돼요")
-             "completion_bonus": 20,          // 스탬프 보유 시(또는 가게 없는 퀘스트) 20, 아니면 0
+             "points_added": 40,              // answers 전부 빈 값이면 0
+             "completion_bonus": 20,          // 조건: [스탬프 보유 또는 가게 없는 퀘스트] **그리고 answers 1개 이상**. 아니면 0
+                                              // answers 전부 빈 값이면 40·20 모두 0 — 저장 전 화면 안내: "한 가지만 골라주시면 포인트가 적립돼요 (+60점)"
              "balance": 100, "title_unlocked": "봄내 첫걸음",
              "verified": true}                // 스탬프 없이 저장 시 false → "인증 없음" 뱃지
 ```
 - 저장 시 recorded 전이(완주), 저장 후 기록은 읽기 전용
+- 오류: 400 QUEST_NOT_STARTED / 409 ALREADY_RECORDED / 400 INVALID_ATTEMPT(attempt>2) / 400 VALIDATION(answers 200자 초과, purpose enum 밖 등)
 
 ### GET /records — 보관함
 ```json
@@ -157,15 +165,17 @@ QuestCard 전체 + 지도용 좌표 + 상태:
 
 ### GET /dashboard/accessibility — 접근성 히트맵 (GeoJSON, #12 스키마)
 FeatureCollection(Polygon). properties: `{"zone_code","name","score","quintile":1~5}` (동별 평균, 5분위)
+— **사각지대 레이어**(25-screens 6장 '여유 시')는 별도 필드·API 없이 **quintile=5 구역을 클라이언트가 필터링**해 표시한다
 
 ### GET /dashboard/inflow — 저유입 상권 (GeoJSON)
 FeatureCollection(Point). properties: `{"name","category","inflow_status":"확정저유입"|"추정후보"|"일반"|"붐빔"}`
 
 ### GET /dashboard/kpi — 성과 숫자 (#36 산식)
 ```json
-응답 200 {"conversion_pct": 44.0,        // stamped ÷ 가게 있는 started. 분모 0이면 null → 화면 "—"
+응답 200 {"conversion_pct": 44.0,        // stamped ÷ 가게 있는 started
          "low_inflow_pct": 52.1,        // 저유입 '확정' 미션 카드 ÷ 가게 미션 있는 노출 카드
-         "median_search_min": 2.4,      // 세션 생성→첫 started 중앙값
+         "median_search_min": 2.4,      // 세션 생성→첫 started **중앙값** (화면 라벨: "탐색 시간(중앙값)")
+                                        // 위 세 지표 공통: 분모 0이면 null → 화면 "—"
          "feasibility_pct": 100,        // 무환승 경로 보유 비율 (각주: 설계로 보장)
          "spend_total_krw": 187000,     // 영수증 인증 합계
          "seed_included": true}         // 화면 각주 "시범 운영 시뮬레이션 포함"
@@ -177,4 +187,4 @@ FeatureCollection(Point). properties: `{"name","category","inflow_status":"확�
 `{"ok": true, "db": true, "demo_now": "2026-08-01T14:00:00"}` — demo_now는 DEMO_NOW 설정 시 그 값
 
 ## 부록 — 에러 코드 전체
-`SESSION_NOT_FOUND(401)` `AGE_NOT_CONFIRMED` `INVALID_TIME_WINDOW` `QUEST_IN_PROGRESS(409)` `WRONG_STORE` `INVALID_CODE` `INVALID_AMOUNT` `NO_MISSION` `NOT_FOUND(404)` `INTERNAL(500 — 화면은 공통 오류 문구+재시도)`
+`SESSION_NOT_FOUND(401)` `AGE_NOT_CONFIRMED` `INVALID_TIME_WINDOW` `QUEST_IN_PROGRESS(409)` `QUEST_NOT_STARTED` `ALREADY_RECORDED(409)` `INVALID_ATTEMPT` `VALIDATION` `WRONG_STORE` `INVALID_CODE` `INVALID_AMOUNT` `NO_MISSION` `NOT_FOUND(404)` `INTERNAL(500 — 화면은 공통 오류 문구+재시도)`
