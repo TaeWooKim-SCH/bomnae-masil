@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { api } from "./api/client";
-import { CollectionCard, CollectionModal, PieceRevealModal, findDongByPoint, isCore, useCollection } from "./collection-map";
+import { CollectionCard, CollectionModal, PieceRevealModal, findDongByPoint, isCollectible, useCollection } from "./collection-map";
 import "./styles.css";
 
 const INTERESTS = [
@@ -748,7 +748,7 @@ function VerifyScreen() {
       const activity = detail?.coords?.activity;
       const feature = activity ? findDongByPoint(collectionFeatures, activity.lat, activity.lng) : null;
       const code = feature?.properties?.zone_code;
-      if (feature && isCore(feature, collectionZoneMap) && !collectionZoneMap.collected.includes(code)) {
+      if (feature && isCollectible(feature, collectionZoneMap) && !collectionZoneMap.collected.includes(code)) {
         revealNextRef.current = next ?? null;
         setResult(null);
         setReveal(feature);
