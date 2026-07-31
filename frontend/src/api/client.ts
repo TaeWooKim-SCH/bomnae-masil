@@ -1,4 +1,6 @@
 import dashboardStats from "../mocks/dashboard_stats.json";
+import dashboardAccessibility from "../mocks/dashboard_accessibility.json";
+import dashboardInflow from "../mocks/dashboard_inflow.json";
 import health from "../mocks/health.json";
 import questDetail from "../mocks/quest_detail.json";
 import questStart from "../mocks/quest_start.json";
@@ -100,8 +102,8 @@ export const api = {
     return request("/api/records", { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, mock);
   },
   getRecords: () => request("/api/records", { headers: sessionHeaders() }, recordsList),
-  getDashboardAccessibility: () => request("/api/dashboard/accessibility", {}),
-  getDashboardInflow: () => request("/api/dashboard/inflow", {}),
+  getDashboardAccessibility: () => request("/api/dashboard/accessibility", {}, dashboardAccessibility),
+  getDashboardInflow: () => request("/api/dashboard/inflow", {}, dashboardInflow),
   getDashboardKpi: () => request("/api/dashboard/kpi", {}, dashboardStats),
   mockSessionNotFound: () => request("/api/records", {}, sessionNotFound),
 };

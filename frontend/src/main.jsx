@@ -791,6 +791,143 @@ function RecommendHandoff() {
   );
 }
 
+const ACCESSIBILITY_COLORS = {
+  1: "#dceff7",
+  2: "#acd9e9",
+  3: "#70b9d5",
+  4: "#3388b0",
+  5: "#0b587d",
+};
+
+const INFLOW_COLORS = {
+  "확정저유입": "#c84e3a",
+  "추정후보": "#d79545",
+  "일반": "#5b9a87",
+  "붐빔": "#6e7c86",
+};
+
+function DashboardMap({ layer, data }) {
+  const mapRef = React.useRef(null);
+  const [mapStatus, setMapStatus] = React.useState("지도를 불러오는 중이에요.");
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const sdkScript = document.getElementById("kakao-map-sdk");
+    const drawMap = () => {
+      if (!window.kakao?.maps || !mapRef.current) {
+        setMapStatus("지도를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      window.kakao.maps.load(() => {
+        if (cancelled || !mapRef.current) return;
+        mapRef.current.replaceChildren();
+        const center = new window.kakao.maps.LatLng(37.8813, 127.7298);
+        const map = new window.kakao.maps.Map(mapRef.current, { center, level: 7 });
+        const bounds = new window.kakao.maps.LatLngBounds();
+
+        if (layer === "accessibility") {
+          const hoverLabel = document.createElement("div");
+          hoverLabel.className = "dashboard-zone-label";
+          const hoverOverlay = new window.kakao.maps.CustomOverlay({ content: hoverLabel, yAnchor: 1.35 });
+          data.features.forEach((feature) => {
+            const points = feature.geometry.coordinates[0].map(([lng, lat]) => new window.kakao.maps.LatLng(lat, lng));
+            points.forEach((point) => bounds.extend(point));
+            const polygon = new window.kakao.maps.Polygon({
+              map,
+              path: points,
+              strokeWeight: 1.5,
+              strokeColor: "#fff",
+              strokeOpacity: .9,
+              fillColor: ACCESSIBILITY_COLORS[feature.properties.quintile] ?? ACCESSIBILITY_COLORS[1],
+              fillOpacity: .58,
+            });
+            const showZone = (event) => {
+              hoverLabel.textContent = `${feature.properties.name} · ${feature.properties.score}점`;
+              hoverOverlay.setPosition(event.latLng);
+              hoverOverlay.setMap(map);
+            };
+            const hideZone = () => hoverOverlay.setMap(null);
+            window.kakao.maps.event.addListener(polygon, "mouseover", showZone);
+            window.kakao.maps.event.addListener(polygon, "mouseout", hideZone);
+            window.kakao.maps.event.addListener(polygon, "click", (event) => {
+              showZone(event);
+              setMapStatus(`${feature.properties.name} 접근성 점수는 ${feature.properties.score}점이에요.`);
+            });
+          });
+        } else {
+          data.features.forEach((feature) => {
+            const [lng, lat] = feature.geometry.coordinates;
+            const position = new window.kakao.maps.LatLng(lat, lng);
+            bounds.extend(position);
+            const dot = document.createElement("span");
+            dot.className = "dashboard-store-dot";
+            dot.style.background = INFLOW_COLORS[feature.properties.inflow_status] ?? INFLOW_COLORS.일반;
+            new window.kakao.maps.CustomOverlay({ map, position, content: dot, yAnchor: .5, xAnchor: .5 });
+            const label = document.createElement("div");
+            label.className = "dashboard-store-label";
+            label.textContent = `${feature.properties.name} · ${feature.properties.category}`;
+            new window.kakao.maps.CustomOverlay({ map, position, content: label, yAnchor: 2.2, xAnchor: .5 });
+          });
+        }
+        if (data.features.length) map.setBounds(bounds, 42, 42, 42, 42);
+        setMapStatus(layer === "accessibility" ? "동별 접근성 점수를 5단계 색으로 표시하고 있어요." : "상권별 방문 현황을 표시하고 있어요.");
+      });
+    };
+    const onError = () => setMapStatus("지도를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+    if (window.kakao?.maps) drawMap();
+    else {
+      sdkScript?.addEventListener("load", drawMap, { once: true });
+      sdkScript?.addEventListener("error", onError, { once: true });
+    }
+    return () => {
+      cancelled = true;
+      sdkScript?.removeEventListener("load", drawMap);
+      sdkScript?.removeEventListener("error", onError);
+    };
+  }, [data, layer]);
+
+  return <><div className="dashboard-map" ref={mapRef} /><p className="dashboard-map-status" aria-live="polite">{mapStatus}</p></>;
+}
+
+function DashboardScreen() {
+  const [layer, setLayer] = React.useState("accessibility");
+  const [dashboard, setDashboard] = React.useState(null);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    let mounted = true;
+    Promise.all([api.getDashboardAccessibility(), api.getDashboardInflow(), api.getDashboardKpi()])
+      .then(([accessibility, inflow, kpi]) => { if (mounted) setDashboard({ accessibility, inflow, kpi }); })
+      .catch(() => { if (mounted) setError("잠시 문제가 있었어요. 다시 시도해 주세요"); });
+    return () => { mounted = false; };
+  }, []);
+
+  if (error) return <main className="dashboard-page"><section className="dashboard-error"><h1>정책 대시보드</h1><p>{error}</p><button type="button" onClick={() => window.location.reload()}>다시 시도</button></section></main>;
+  if (!dashboard) return <main className="dashboard-page"><section className="dashboard-loading"><p>정책 데이터를 불러오는 중이에요.</p></section></main>;
+
+  const mapData = layer === "accessibility" ? dashboard.accessibility : dashboard.inflow;
+  const kpiCards = [
+    ["방문 전환율", dashboard.kpi.conversion_pct === null ? "—" : `${dashboard.kpi.conversion_pct}%`, "가게 미션 시작 후 인증 비율"],
+    ["저유입 추천 비중", dashboard.kpi.low_inflow_pct === null ? "—" : `${dashboard.kpi.low_inflow_pct}%`, "추천 카드 중 저유입 상권 비중"],
+    ["탐색 시간(중앙값)", dashboard.kpi.median_search_min === null ? "—" : `${dashboard.kpi.median_search_min}분`, "세션 생성부터 첫 퀘스트 시작까지"],
+    ["실행 가능성", dashboard.kpi.feasibility_pct === null ? "—" : `${dashboard.kpi.feasibility_pct}%`, "무환승 경로를 보유한 추천 비율"],
+  ];
+
+  return <main className="dashboard-page">
+    <header className="dashboard-header"><a href="/">봄내마실</a><span>춘천시 정책 대시보드</span><small>시범 운영</small></header>
+    <section className="dashboard-intro"><p>정책 인사이트</p><h1>시민의 이동 경험이<br />지역 상권으로 이어지는 흐름</h1><span>추천 엔진의 접근성·상권 데이터를 한눈에 확인하세요.</span></section>
+    <section className="dashboard-grid">
+      <article className="dashboard-map-card">
+        <div className="dashboard-card-heading"><div><p>지역 현황 지도</p><h2>{layer === "accessibility" ? "동별 접근성 히트맵" : "상권 방문 현황"}</h2></div><span>{mapData.features.length}개 영역</span></div>
+        <div className="dashboard-tabs" role="tablist" aria-label="지도 종류"><button type="button" role="tab" aria-selected={layer === "accessibility"} className={layer === "accessibility" ? "selected" : ""} onClick={() => setLayer("accessibility")}>접근성 지도</button><button type="button" role="tab" aria-selected={layer === "inflow"} className={layer === "inflow" ? "selected" : ""} onClick={() => setLayer("inflow")}>상권 현황</button></div>
+        <div className="dashboard-map-wrap"><DashboardMap layer={layer} data={mapData} /></div>
+        {layer === "accessibility" ? <div className="dashboard-legend"><span>높음</span>{[1, 2, 3, 4, 5].map((value) => <i key={value} style={{ background: ACCESSIBILITY_COLORS[value] }} />)}<span>낮음</span></div> : <div className="dashboard-legend inflow-legend">{Object.entries(INFLOW_COLORS).map(([label, color]) => <span key={label}><i style={{ background: color }} />{label}</span>)}</div>}
+      </article>
+      <section className="dashboard-kpi-panel"><div className="dashboard-card-heading"><div><p>운영 성과</p><h2>핵심 지표</h2></div></div><div className="dashboard-kpi-grid">{kpiCards.map(([label, value, detail]) => <article className="dashboard-kpi" key={label}><p>{label}</p><strong>{value}</strong><span>{detail}</span></article>)}</div><p className="dashboard-footnote">{dashboard.kpi.seed_included ? "시범 운영 시뮬레이션 데이터 포함" : "운영 데이터 기준"}</p></section>
+    </section>
+  </main>;
+}
+
 function RouterApp() {
   return <Routes>
     <Route path="/" element={<Home />} />
@@ -799,6 +936,7 @@ function RouterApp() {
     <Route path="/verify/:questId" element={<VerifyScreen />} />
     <Route path="/records/:questId" element={<RecordScreen />} />
     <Route path="/records" element={<RecordScreen />} />
+    <Route path="/dashboard" element={<DashboardScreen />} />
     <Route path="*" element={<Home />} />
   </Routes>;
 }
