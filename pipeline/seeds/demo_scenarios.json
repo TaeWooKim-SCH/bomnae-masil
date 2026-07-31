@@ -1,0 +1,30 @@
+{
+  "demo_now": "2026-08-01T14:00:00+09:00",
+  "merchant_radius_m": 500,
+  "scenarios": [
+    {
+      "id": "provisional-culture-joyun",
+      "interests": ["문화·공연"],
+      "zone_code": "4211053000",
+      "time": "14:00-17:00",
+      "budget_krw": 10000,
+      "provisional": true
+    },
+    {
+      "id": "provisional-nature-yaksamyeong",
+      "interests": ["자연·나들이"],
+      "zone_code": "4211054500",
+      "time": "14:00-17:00",
+      "budget_krw": 10000,
+      "provisional": true
+    },
+    {
+      "id": "provisional-health-soyang",
+      "interests": ["운동·건강"],
+      "zone_code": "4211058000",
+      "time": "14:00-17:00",
+      "budget_krw": 15000,
+      "provisional": true
+    }
+  ]
+}
