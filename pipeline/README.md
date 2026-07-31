@@ -59,6 +59,8 @@ python -m pipeline.load.accessibility_scores
 - `score`는 0~100 정규화 값이다. 최단 경로의 하차 도보시간(70%)과 해당 조합의
   직행 노선번호 수(30%, 최대 5개)를 합산한다. 추천 점수의 접근성 20점은 이 값을
   조회해 사용한다.
+- 정규화 CSV의 순서 검증과 별개로, 실제 춘천시 공식 노선도와 대조한 무환승 표본
+  10건은 [검증 기록](verification/accessibility_route_map_samples.md)에 남긴다.
 
 대표 조회도 경로 계산 없이 아래처럼 표 한 번만 읽는다.
 
