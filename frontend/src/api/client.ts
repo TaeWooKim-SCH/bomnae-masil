@@ -22,7 +22,23 @@ import zones from "../mocks/zones.json";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
-const mockQuestStates = new Map<string, { status: string; started_at: string | null }>();
+const MOCK_STATE_KEY = "mock_quest_states";
+
+function loadMockStates(): Map<string, { status: string; started_at: string | null }> {
+  try {
+    return new Map(Object.entries(JSON.parse(localStorage.getItem(MOCK_STATE_KEY) ?? "{}")));
+  } catch {
+    return new Map();
+  }
+}
+
+// 목 모드 상태를 localStorage에 함께 적어 새로고침에도 진행(started/stamped)이 유지되게 한다
+const mockQuestStates = loadMockStates();
+
+function rememberMockState(questId: string, state: { status: string; started_at: string | null }) {
+  mockQuestStates.set(questId, state);
+  try { localStorage.setItem(MOCK_STATE_KEY, JSON.stringify(Object.fromEntries(mockQuestStates))); } catch { /* 저장 실패 무시 */ }
+}
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -70,7 +86,12 @@ function sessionHeaders() {
 export const api = {
   health: () => request("/api/health", {}, health),
   createSession: (body: unknown) => request("/api/sessions", { method: "POST", body: JSON.stringify(body) }, session),
-  deleteSession: (sessionId: string) => request(`/api/sessions/${sessionId}`, { method: "DELETE", headers: sessionHeaders() }, null),
+  deleteSession: async (sessionId: string) => {
+    const result = await request(`/api/sessions/${sessionId}`, { method: "DELETE", headers: sessionHeaders() }, null);
+    mockQuestStates.clear();
+    try { localStorage.removeItem(MOCK_STATE_KEY); } catch { /* 무시 */ }
+    return result;
+  },
   getZones: () => request("/api/zones", {}, zones),
   getStops: (zoneCode: string) => request(`/api/stops?zone=${encodeURIComponent(zoneCode)}`, {}, stops),
   recommend: (body: unknown, relaxed = false) => request("/api/quests/recommend", { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, relaxed ? recommendRelaxed : recommend),
@@ -81,7 +102,7 @@ export const api = {
   },
   startQuest: async (questId: string, body: unknown) => {
     const started = await request(`/api/quests/${questId}/start`, { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, questStart);
-    if (USE_MOCK) mockQuestStates.set(questId, { status: started.status, started_at: started.started_at });
+    if (USE_MOCK) rememberMockState(questId, { status: started.status, started_at: started.started_at });
     return started;
   },
   verifyQuest: async (questId: string, body: unknown, scenario: "success" | "fail" | "already" | "wrongStore" = "success") => {
@@ -90,7 +111,7 @@ export const api = {
     if (USE_MOCK && "error" in verified) throw verified;
     if (USE_MOCK && !verified.already) {
       const current = mockQuestStates.get(questId);
-      mockQuestStates.set(questId, { status: "stamped", started_at: current?.started_at ?? null });
+      rememberMockState(questId, { status: "stamped", started_at: current?.started_at ?? null });
     }
     return verified;
   },
