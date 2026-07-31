@@ -73,7 +73,7 @@ h1, h2, p { margin-top: 0; }
 .field-hint { color: #93a0a8; }
 .form-error { color: #c0452b; font-weight: 600; }
 
-.modal-backdrop { position: fixed; z-index: 10; inset: 0; display: flex; align-items: flex-end; background: rgba(10,26,36,.55); backdrop-filter: blur(2px); }
+.modal-backdrop { position: fixed; z-index: 30; inset: 0; display: flex; align-items: flex-end; background: rgba(10,26,36,.55); backdrop-filter: blur(2px); }
 .age-gate { width: 100%; padding: 26px 22px 34px; border-radius: 22px 22px 0 0; background: #fff; box-shadow: none; }
 .age-gate h1 { margin: 0; color: #0b3a52; font-size: 20px; font-weight: 800; letter-spacing: -.4px; }
 .check-row { display: flex; align-items: center; gap: 11px; margin: 16px 0 10px; padding: 13px 14px; border: 1.5px solid #cbd8df; border-radius: 12px; background: #fff; color: #1c262b; font-size: 14px; font-weight: 700; }

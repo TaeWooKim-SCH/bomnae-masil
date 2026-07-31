@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { api } from "./api/client";
+import { CollectionCard, CollectionModal } from "./collection-map";
 import "./styles.css";
 
 const INTERESTS = [
@@ -154,6 +155,7 @@ function Home() {
   const [customBudget, setCustomBudget] = React.useState("");
   const [recommendError, setRecommendError] = React.useState("");
   const [recommending, setRecommending] = React.useState(false);
+  const [collectionOpen, setCollectionOpen] = React.useState(false); // 봄내 조각지도 모달 (#100)
 
   React.useEffect(() => {
     api.getZones().then(setZones).catch(() => setLoadError("동네 목록을 불러오지 못했어요. 다시 시도해 주세요."));
@@ -280,6 +282,9 @@ function Home() {
         <AppHeader balance={balance} titles={titles} health={health} />
         <h1>{nickname ? <>{nickname}님,<span className="nickname-greeting-gap">오늘 뭐 하지?</span></> : "오늘 뭐 하지?"}</h1>
         <p className="intro">네 가지만 알려주시면 오늘 갈 수 있는 퀘스트를 찾아드릴게요.</p>
+
+        <CollectionCard onOpen={() => setCollectionOpen(true)} />
+        {collectionOpen && <CollectionModal onClose={() => setCollectionOpen(false)} />}
 
         <ContinueBanner activeQuest={activeQuest} onNavigate={navigate} />
         {quickStart && (
@@ -663,6 +668,7 @@ function RecordScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = React.useState(questId ? "write" : "archive");
+  const [collectionOpen, setCollectionOpen] = React.useState(false); // 봄내 조각지도 모달 (#100)
   const [purpose, setPurpose] = React.useState("hobby");
   const [answers, setAnswers] = React.useState(["", "", ""]);
   const [pickedChips, setPickedChips] = React.useState([null, null, null]);
@@ -744,7 +750,7 @@ function RecordScreen() {
 
   if (selectedRecord) return <main className="app-shell record-page"><section className="record-content readonly-record"><header className="record-head"><button onClick={() => setSelectedRecord(null)}>‹</button><h1>나의 기록</h1><strong>{balance.toLocaleString()}P</strong></header><p className="record-date">{selectedRecord.created_at.slice(0, 10).replaceAll("-", ".")}</p><h2>{selectedRecord.title}</h2><div className="record-tags">{selectedRecord.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>{!selectedRecord.verified && <span className="unverified-badge">인증 없음</span>}<article>{selectedRecord.body ?? "이 기록의 본문은 생성 당시 읽기 전용으로 보관됩니다."}</article></section><BottomNav active="archive" /></main>;
 
-  if (mode === "archive") return <main className="app-shell record-page"><section className="record-content archive-content"><header className="record-head"><button onClick={() => navigate(-1)}>‹</button><h1>보관함</h1><strong>{balance.toLocaleString()}P</strong></header><p className="archive-lead">오늘의 경험을 차곡차곡 모아 보세요.</p>{titles.map((title) => <span className="archive-title" key={title}>✦ {title}</span>)}{saveResult && <p className="record-earned">{saveResult.points_added > 0 ? `기록 +${saveResult.points_added}P` : "기록을 저장했어요"}{saveResult.completion_bonus > 0 ? ` · 완주 보너스 +${saveResult.completion_bonus}P` : ""}</p>}<section className="archive-list">{records.length ? records.map((record) => <button className="archive-card" key={record.record_id} onClick={() => setSelectedRecord(record)}><small>{record.created_at.slice(0, 10).replaceAll("-", ".")}</small><b>{record.title}</b><span>{record.tags.map((tag) => `#${tag}`).join("  ")}</span>{!record.verified && <em>인증 없음</em>}</button>) : <p className="archive-empty">아직 저장한 기록이 없어요.<br />오늘의 경험을 첫 기록으로 남겨 보세요.</p>}</section>{error && <p className="form-error">{error}</p>}<button className="delete-records" type="button" onClick={() => setDeleteOpen(true)}>내 기록 전체 삭제</button></section><BottomNav active="archive" />{deleteOpen && <div className="modal-backdrop delete-modal"><section role="dialog" aria-modal="true"><h2>기록을 모두 삭제할까요?</h2><p>모든 기록·스탬프·포인트가 삭제돼요.<br />개인 식별이 불가능한 통계는 유지됩니다.</p><div><button onClick={() => setDeleteOpen(false)}>취소</button><button onClick={deleteAll}>전체 삭제</button></div></section></div>}</main>;
+  if (mode === "archive") return <main className="app-shell record-page"><section className="record-content archive-content"><header className="record-head"><button onClick={() => navigate(-1)}>‹</button><h1>보관함</h1><strong>{balance.toLocaleString()}P</strong></header><p className="archive-lead">오늘의 경험을 차곡차곡 모아 보세요.</p>{titles.map((title) => <span className="archive-title" key={title}>✦ {title}</span>)}<CollectionCard onOpen={() => setCollectionOpen(true)} />{collectionOpen && <CollectionModal onClose={() => setCollectionOpen(false)} />}{saveResult && <p className="record-earned">{saveResult.points_added > 0 ? `기록 +${saveResult.points_added}P` : "기록을 저장했어요"}{saveResult.completion_bonus > 0 ? ` · 완주 보너스 +${saveResult.completion_bonus}P` : ""}</p>}<section className="archive-list">{records.length ? records.map((record) => <button className="archive-card" key={record.record_id} onClick={() => setSelectedRecord(record)}><small>{record.created_at.slice(0, 10).replaceAll("-", ".")}</small><b>{record.title}</b><span>{record.tags.map((tag) => `#${tag}`).join("  ")}</span>{!record.verified && <em>인증 없음</em>}</button>) : <p className="archive-empty">아직 저장한 기록이 없어요.<br />오늘의 경험을 첫 기록으로 남겨 보세요.</p>}</section>{error && <p className="form-error">{error}</p>}<button className="delete-records" type="button" onClick={() => setDeleteOpen(true)}>내 기록 전체 삭제</button></section><BottomNav active="archive" />{deleteOpen && <div className="modal-backdrop delete-modal"><section role="dialog" aria-modal="true"><h2>기록을 모두 삭제할까요?</h2><p>모든 기록·스탬프·포인트가 삭제돼요.<br />개인 식별이 불가능한 통계는 유지됩니다.</p><div><button onClick={() => setDeleteOpen(false)}>취소</button><button onClick={deleteAll}>전체 삭제</button></div></section></div>}</main>;
 
   return <main className="app-shell record-page"><section className="record-content"><header className="record-head"><button onClick={() => navigate(-1)}>‹</button><h1>오늘을 기록해 볼까요?</h1><strong>{balance.toLocaleString()}P</strong></header><p className="record-subtitle">짧게 답해 주시면 오늘의 경험을 기록으로 정리해 드려요.</p><section className="purpose-section"><h2>이 기록을 어디에 쓸까요?</h2><div>{[["portfolio", "포트폴리오"], ["hobby", "취미 아카이브"], ["learning", "배움일지"]].map(([value, label]) => <button className={purpose === value ? "selected" : ""} key={value} onClick={() => setPurpose(value)}>{label}</button>)}</div></section><p className="privacy-hint">실명·연락처는 적지 마세요.</p>{RECORD_QUESTIONS.map((item, index) => <section className="record-question" key={item.question}><h2>{index + 1}. {item.question}</h2><div className="answer-chips">{item.chips.map((chip) => <button className={pickedChips[index] === chip ? "selected" : ""} key={chip} onClick={() => chooseChip(index, chip)}>{chip}</button>)}</div><textarea value={answers[index]} maxLength={200} placeholder="직접 적어도 좋아요 (최대 200자)" onChange={(event) => setAnswers((current) => current.map((value, answerIndex) => answerIndex === index ? event.target.value : value))} /></section>)}{!hasAnswer && <p className="answer-warning">한 가지만 골라주시면 포인트가 적립돼요 (+60점)</p>}<button className="draft-button" disabled={generating || Boolean(draft && regenerations >= 2)} onClick={generateDraft}>{generating ? "AI가 기록을 정리하고 있어요…" : draft ? `다시 생성 (${2 - regenerations}회 남음)` : "AI 초안 만들기"}</button>{slowNotice && <p className="slow-notice">연결이 느려 기본 초안을 먼저 드려요.</p>}{draft && <section className="draft-editor"><h2>AI 초안</h2><input value={draft.title} maxLength={100} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /><textarea value={draft.body} maxLength={500} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} /><div className="record-tags">{draft.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div><button className="primary-button" onClick={saveRecord} disabled={saving}>{saving ? "저장하는 중…" : "기록 저장하기"}</button></section>}{error && <p className="form-error">{error}</p>}</section><BottomNav active="quest" /></main>;
 }
