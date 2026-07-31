@@ -86,6 +86,33 @@ def score(input_value: dict) -> dict:
 
 
 class BuildQuestsTest(unittest.TestCase):
+    def test_same_day_activity_without_operating_hours_passes_base_stage(self) -> None:
+        """회귀(8/2 수정): 운영시간 원천이 없는 당일형은 시간 하드 필터를 면제받고
+        기본 단계에서 카드가 되어야 한다 — 후보 탈락시키면 기본 단계가 항상 0장이 된다."""
+        repository = FakeRepository(
+            scheduled=[
+                activity(f"same-day-{index}", kind="당일형", schedule=None, runtime=None)
+                for index in range(3)
+            ],
+            always_open=[],
+        )
+        result = build_quests(
+            {
+                "interests": ["문화·공연"],
+                "origin": {"zone_code": "4211065000", "stop_id": None},
+                "time_window": TIME_WINDOW,
+                "max_budget_krw": 30000,
+                "exclude_activity_ids": [],
+            },
+            repository=repository,
+            score_calculator=score,
+            current_time=DEMO_NOW,
+        )
+        self.assertIsNone(result.relaxed)
+        self.assertEqual(3, len(result.cards))
+        self.assertEqual({"당일형"}, {card["activity"]["type"] for card in result.cards})
+
+
     def test_always_open_relaxation_keeps_scheduled_candidates_in_repository_query(self) -> None:
         class CapturingSession:
             def __init__(self) -> None:

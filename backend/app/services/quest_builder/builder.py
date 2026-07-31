@@ -394,24 +394,32 @@ def _is_available_today(activity: ActivityCandidate, today: date) -> bool:
     return activity.start_date <= today <= activity.end_date
 
 
+DEFAULT_RUNTIME_MIN = 60  # 시간 원천이 없는 활동의 최소 체류 가정 (#13 데모 규칙과 동일)
+
+
 def _activity_timing(
     activity: ActivityCandidate, window_start: datetime, window_end: datetime, now: datetime
 ) -> tuple[datetime, datetime, int] | None:
-    """상시형에만 적재된 운영시간·60분 체류 정보를 읽는다.
+    """활동의 이용 가능 시간 창을 돌려준다.
 
-    시간 원천이 없는 당일형은 시간 하드 필터에서 제외한다는 R3 확정 사항을 따른다.
+    R3 확정 사항: 시간 원천(운영시간)이 없는 당일형·신청형은 "운영시간 하드 필터"를 적용하지
+    않는다 — 후보에서 빼는 것이 아니라 검사 없이 통과시킨다(8/2 버그 수정: 기존 구현은 당일형을
+    전부 탈락시켜 기본 단계가 항상 0장 → 매번 완화 문구가 노출됐다). 이동 시간 필터(_time_fit)는
+    그대로 작동하며, 체류는 최소 60분(DEFAULT_RUNTIME_MIN)을 가정한다.
     """
 
-    if activity.type != "상시형" or _is_closed_today(activity.schedule_text, now.weekday()):
+    day = window_start.date()
+    if window_end.date() != day or now.date() != day:
         return None
+    if _is_closed_today(activity.schedule_text, now.weekday()):
+        return None
+    if activity.type != "상시형":
+        return (window_start, window_end, DEFAULT_RUNTIME_MIN)
     hours = _parse_operating_hours(activity.schedule_text)
     runtime_min = _parse_runtime_minutes(activity.runtime_text)
     if hours is None or runtime_min is None:
         return None
     opens, closes = hours
-    day = window_start.date()
-    if window_end.date() != day or now.date() != day:
-        return None
     return (
         datetime.combine(day, opens),
         datetime.combine(day, closes),
