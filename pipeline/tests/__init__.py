@@ -1,1 +1,1 @@
-"""R3 pipeline tests."""
+"""Pipeline regression tests."""

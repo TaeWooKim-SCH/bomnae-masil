@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS stop_routes (
 CREATE TABLE IF NOT EXISTS activities (
     activity_id text PRIMARY KEY, source_event_id text NOT NULL, name text NOT NULL, type text NOT NULL,
     status text, genre text, start_date date NOT NULL, end_date date NOT NULL, schedule_text text,
-    runtime_text text, price_krw integer, price_unknown boolean NOT NULL, audience_text text,
+    runtime_text text, price_krw integer, price_unknown boolean NOT NULL, interest_tags text, audience_text text,
     venue_name text NOT NULL, longitude double precision, latitude double precision,
     needs_geocode boolean NOT NULL, source_url text NOT NULL, poster_url text
 );
@@ -37,3 +37,16 @@ CREATE TABLE IF NOT EXISTS resident_population (
     zone_code text PRIMARY KEY, zone_name text NOT NULL, reference_date date NOT NULL,
     resident_population integer NOT NULL
 );
+
+-- One row per (boarding stop, activity). A missing route is explicit rather
+-- than represented by a missing row, so consumers can query this table only.
+CREATE TABLE IF NOT EXISTS accessibility_scores (
+    activity_id text NOT NULL, zone_code text, board_stop_id text NOT NULL,
+    alight_stop_id text, score numeric NOT NULL, no_transfer boolean NOT NULL,
+    best_route_id text, route_no text, stops_count integer, ride_min integer,
+    walk_min integer, duration_min integer,
+    PRIMARY KEY (activity_id, board_stop_id)
+);
+
+CREATE INDEX IF NOT EXISTS accessibility_scores_zone_activity_idx
+    ON accessibility_scores (zone_code, activity_id, no_transfer, score DESC);
