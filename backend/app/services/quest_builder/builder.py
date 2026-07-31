@@ -18,6 +18,7 @@ from app.timebase import now_kst
 
 
 RELAXED_MESSAGE = "조건을 조금 넓혀 찾았어요"
+EMPTY_RESULT_MESSAGE = "지금 조건에 맞는 활동이 없어요"
 WAIT_BUFFER_MIN = 10
 
 _OPERATING_HOURS = re.compile(r"(\d{1,2}):(\d{2})\s*[-~–]\s*(\d{1,2}):(\d{2})")
@@ -318,7 +319,11 @@ def _build_with_relaxation(
         )
 
     cards.sort(key=lambda card: (-card["score"]["total"], card["refs"]["activity_id"]))
-    relaxed = {"steps": steps, "message": RELAXED_MESSAGE} if steps else None
+    relaxed = (
+        {"steps": steps, "message": EMPTY_RESULT_MESSAGE if not cards else RELAXED_MESSAGE}
+        if steps
+        else None
+    )
     return BuildQuestsResult(cards=cards[:6], relaxed=relaxed)
 
 

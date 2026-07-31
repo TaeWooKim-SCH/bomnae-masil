@@ -207,6 +207,7 @@ class BuildQuestsTest(unittest.TestCase):
 
         self.assertEqual([], result.cards)
         self.assertEqual(["budget", "interest", "always_open"], result.relaxed["steps"])
+        self.assertEqual("지금 조건에 맞는 활동이 없어요", result.relaxed["message"])
 
 
 if __name__ == "__main__":
