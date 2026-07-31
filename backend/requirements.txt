@@ -1,0 +1,11 @@
+# 서버 런타임 (Cloudtype 배포 대상) — Python 3.11+
+# 규칙: 패키지 추가는 이 파일에 기록 + 단톡 공지 (R2 창구).
+# R2-01 첫 설치 성공 후 `pip freeze > requirements.lock.txt` 커밋 — 이후 전원은 lock으로 설치.
+fastapi~=0.115.0
+uvicorn[standard]~=0.32.0
+sqlalchemy~=2.0.35
+psycopg2-binary~=2.9.9
+pydantic~=2.9.0
+anthropic~=0.39.0
+python-dotenv~=1.0.1
+httpx~=0.27.0
