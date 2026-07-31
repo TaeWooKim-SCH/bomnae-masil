@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db import get_db
 from app.deps import get_current_session
 from app.models import Quest
-from app.routers._coords_mock import resolve_coords
+from app.core.coords import resolve_coords
 from app.timebase import now_kst
 
 router = APIRouter(prefix="/quests", tags=["quests"])
@@ -39,7 +39,7 @@ def quest_detail(quest_id: str, current=Depends(get_current_session), db=Depends
         **quest.card,
         "status": quest.status,
         "started_at": quest.started_at.isoformat(timespec="seconds") if quest.started_at else None,
-        "coords": resolve_coords(quest.card),
+        "coords": resolve_coords(db, quest.card),
     }
 
 
