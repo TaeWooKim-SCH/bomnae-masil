@@ -15,7 +15,7 @@ const FAINT = "#93A0A8";
 // 도심 수집판 14개 동 (design/prototype.html v4 확정 — 외곽 읍·면·신사우동은 '준비 중')
 const CORE_DONGS = ["교동", "근화동", "소양동", "약사명동", "조운동", "효자1동", "효자2동", "효자3동", "후평1동", "후평2동", "후평3동", "석사동", "퇴계동", "강남동"];
 const dongName = (f) => (f.properties?.name ?? "").split(" ").pop();
-const isCore = (f) => CORE_DONGS.includes(dongName(f));
+export const isCore = (f) => CORE_DONGS.includes(dongName(f));
 
 const MILESTONES = [
   { at: 5, label: "동네 수집가" },
@@ -239,6 +239,66 @@ export function CollectionModal({ onClose }) {
         {notice && (
           <div style={{ position: "fixed", left: "50%", bottom: 42, transform: "translateX(-50%)", background: NAVY, color: "#fff", borderRadius: 99, padding: "9px 16px", font: "600 12.5px Pretendard,sans-serif", zIndex: 60 }}>{notice}</div>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+// ---- 조각 획득 연출 (#100 — v4 pieceReveal) ----------------------------------
+function pointInRing(ring, lng, lat) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+export function findDongByPoint(features, lat, lng) {
+  // 활동 좌표가 속한 행정동 — 서버·계약 변경 없이 클라이언트 점포함 판정
+  for (const f of features) {
+    const g = f.geometry;
+    const polys = g?.type === "Polygon" ? [g.coordinates] : g?.type === "MultiPolygon" ? g.coordinates : [];
+    for (const poly of polys) if (poly[0] && pointInRing(poly[0], lng, lat)) return f;
+  }
+  return null;
+}
+
+export function PieceRevealModal({ feature, features, zoneMap, onDone }) {
+  const { n, m } = coreProgress(zoneMap, features);
+  const code = feature.properties?.zone_code;
+  const already = zoneMap.collected.includes(code);
+  const count = Math.min(m, n + (already || !isCore(feature) ? 0 : 1));
+  const projector = makeProjector(features);
+  return (
+    <div style={{ position: "fixed", top: 0, bottom: 0, left: "50%", width: "min(100%, 430px)", transform: "translateX(-50%)", background: "rgba(10,26,36,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 58, backdropFilter: "blur(3px)" }}>
+      <div style={{ background: "#fff", borderRadius: 22, padding: "24px 22px", width: "84%", textAlign: "center" }}>
+        <div style={{ font: "700 11.5px Pretendard,sans-serif", color: BLUE, letterSpacing: 1 }}>봄내 조각</div>
+        <div style={{ font: "800 19px Pretendard,sans-serif", color: NAVY, marginTop: 4 }}>{dongName(feature)} 조각 획득!</div>
+        <div style={{ position: "relative", marginTop: 12, background: "#F7FAFB", borderRadius: 14, overflow: "hidden" }}>
+          {projector && (
+            <svg viewBox="0 0 360 300" style={{ width: "100%", display: "block" }}>
+              <defs>
+                <pattern id="revealHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                  <rect width="6" height="6" fill="#EDF1F4" />
+                  <line x1="0" y1="0" x2="0" y2="6" stroke="#D3DDE2" strokeWidth="2" />
+                </pattern>
+              </defs>
+              {features.filter((f) => f !== feature).map((f) => {
+                const st = stateOf(f, zoneMap);
+                const fill = st === "filled" ? "#BBDDF0" : st === "open" ? "#EAF0F3" : "url(#revealHatch)";
+                return <path key={f.properties?.zone_code} d={projector.path(f)} fill={fill} stroke="#D3DDE2" strokeWidth="1" strokeDasharray={st === "open" ? "4 3" : "none"} fillRule="evenodd" />;
+              })}
+              <path className="piece-in" d={projector.path(feature)} fill={BLUE} stroke="#fff" strokeWidth="2" fillRule="evenodd" />
+              {(() => { const [cx, cy] = projector.centroid(feature); return <text x={cx} y={cy} textAnchor="middle" style={{ font: "700 11px Pretendard,sans-serif", fill: "#fff", textShadow: "0 1px 3px rgba(10,26,36,.4)" }}>{dongName(feature)}</text>; })()}
+            </svg>
+          )}
+        </div>
+        <div style={{ font: "600 13px Pretendard,sans-serif", color: SUB, marginTop: 10 }}>
+          봄내 조각 <span style={{ color: BLUE, fontWeight: 800 }}>{count}/{m || "—"}</span>
+        </div>
+        <div onClick={onDone} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && onDone()} style={{ marginTop: 16, background: BLUE, color: "#fff", borderRadius: 12, padding: "14px 0", font: "700 14px Pretendard,sans-serif", cursor: "pointer" }}>확인</div>
       </div>
     </div>
   );
