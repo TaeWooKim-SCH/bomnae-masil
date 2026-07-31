@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import re
+
 from .common import clean_text, number, read_csv, require_columns, source_path, valid_wgs84, write_csv
 
 SOURCE = "강원특별자치도 춘천시_버스정류장 노선정보_20260326.csv"
+EXCEL_DATE_ROUTE = re.compile(r"^(\d{1,2})월\s*(\d{1,2})일$")
+
+
+def normalise_route_no(value: str | None) -> str:
+    """Restore route labels such as ``11-1`` that Excel exported as ``11월 01일``."""
+    route_no = clean_text(value)
+    match = EXCEL_DATE_ROUTE.match(route_no)
+    return f"{int(match.group(1))}-{int(match.group(2))}" if match else route_no
 
 
 def run() -> dict[str, int]:
@@ -24,7 +34,7 @@ def run() -> dict[str, int]:
         cleaned.append(
             {
                 "route_id": route_id,
-                "route_no": clean_text(row.get("노선번호")),
+                "route_no": normalise_route_no(row.get("노선번호")),
                 "stop_id": f"stp_{stop_id}",
                 "sequence": sequence,
                 "stop_name": clean_text(row.get("정류장명")),
