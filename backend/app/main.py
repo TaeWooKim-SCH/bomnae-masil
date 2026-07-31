@@ -56,9 +56,10 @@ def health():
     return {"ok": True, "db": db_ok, "demo_now": now_kst().isoformat(timespec="seconds")}
 
 
-from app.routers import dashboard, quests, recommend, records, sessions, verify  # noqa: E402
+from app.routers import dashboard, quests, recommend, records, refs, sessions, verify  # noqa: E402
 
 api.include_router(sessions.router)
+api.include_router(refs.router)  # GET /zones · /stops — 계약 §2 (인증 불필요)
 api.include_router(recommend.router)  # POST /quests/recommend — 고정 경로가 /{quest_id}보다 먼저
 api.include_router(quests.router)
 api.include_router(verify.router)
