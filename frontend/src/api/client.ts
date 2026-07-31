@@ -6,6 +6,8 @@ import recommend from "../mocks/recommend.json";
 import recommendRelaxed from "../mocks/recommend_relaxed.json";
 import recordDraft from "../mocks/record_draft.json";
 import recordSave from "../mocks/record_save.json";
+import recordSaveNoPoints from "../mocks/record_save_no_points.json";
+import recordSaveUnverified from "../mocks/record_save_unverified.json";
 import recordsList from "../mocks/records_list.json";
 import session from "../mocks/session.json";
 import sessionNotFound from "../mocks/session_not_found.json";
@@ -66,7 +68,7 @@ function sessionHeaders() {
 export const api = {
   health: () => request("/api/health", {}, health),
   createSession: (body: unknown) => request("/api/sessions", { method: "POST", body: JSON.stringify(body) }, session),
-  deleteSession: (sessionId: string) => request(`/api/sessions/${sessionId}`, { method: "DELETE", headers: sessionHeaders() }),
+  deleteSession: (sessionId: string) => request(`/api/sessions/${sessionId}`, { method: "DELETE", headers: sessionHeaders() }, null),
   getZones: () => request("/api/zones", {}, zones),
   getStops: (zoneCode: string) => request(`/api/stops?zone=${encodeURIComponent(zoneCode)}`, {}, stops),
   recommend: (body: unknown, relaxed = false) => request("/api/quests/recommend", { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, relaxed ? recommendRelaxed : recommend),
@@ -80,12 +82,23 @@ export const api = {
     if (USE_MOCK) mockQuestStates.set(questId, { status: started.status, started_at: started.started_at });
     return started;
   },
-  verifyQuest: (questId: string, body: unknown, scenario: "success" | "fail" | "already" | "wrongStore" = "success") => {
+  verifyQuest: async (questId: string, body: unknown, scenario: "success" | "fail" | "already" | "wrongStore" = "success") => {
     const mock = { success: verifySuccess, fail: verifyFail, already: verifyAlready, wrongStore: verifyWrongStore }[scenario];
-    return request(`/api/quests/${questId}/verify`, { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, mock);
+    const verified = await request(`/api/quests/${questId}/verify`, { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, mock);
+    if (USE_MOCK && "error" in verified) throw verified;
+    if (USE_MOCK && !verified.already) {
+      const current = mockQuestStates.get(questId);
+      mockQuestStates.set(questId, { status: "stamped", started_at: current?.started_at ?? null });
+    }
+    return verified;
   },
   generateRecord: (body: unknown) => request("/api/records", { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, recordDraft),
-  saveRecord: (body: unknown) => request("/api/records", { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, recordSave),
+  saveRecord: (body: { quest_id?: string; answers?: string[] }) => {
+    const answered = body.answers?.some(Boolean);
+    const status = body.quest_id ? mockQuestStates.get(body.quest_id)?.status : undefined;
+    const mock = !answered ? recordSaveNoPoints : status === "stamped" || !questDetail.mission ? recordSave : recordSaveUnverified;
+    return request("/api/records", { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, mock);
+  },
   getRecords: () => request("/api/records", { headers: sessionHeaders() }, recordsList),
   getDashboardAccessibility: () => request("/api/dashboard/accessibility", {}),
   getDashboardInflow: () => request("/api/dashboard/inflow", {}),
