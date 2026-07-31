@@ -13,7 +13,7 @@
 | 3.5 | [docs/15-data.md](docs/15-data.md) | 공공데이터 10종 상세 목록 (수집 기준) | R3 필독 |
 | 3.7 | [docs/25-screens.md](docs/25-screens.md) | 페이지별 기능 정의서 (화면 6종 요소·상태·문구) | R1 필독 |
 | 4 | docs/30-api-contract.md | 화면↔서버 약속 (작성 예정 — Day 0 동결) | R1·R2·R4 |
-| 5 | docs/40-demo.md | 데모 대본 (작성 예정) | R4 주관 |
+| 5 | [docs/DEMO_SCENARIO.md](docs/DEMO_SCENARIO.md) | 데모 대본 | R4 주관 |
 
 공식 제출 기획서(PDF)는 대회 제출본이며, 내용 요약은 00-overview에 있다.
 
