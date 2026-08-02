@@ -17,6 +17,16 @@ const FAINT = "#93A0A8";
 //  (2) 데이터: 조각을 모을 수 있는 동인지 — 서버 zone_map.available(계약 §5)이 진실
 const DOWNTOWN_DONGS = ["교동", "근화동", "소양동", "약사명동", "조운동", "효자1동", "효자2동", "효자3동", "후평1동", "후평2동", "후평3동", "석사동", "퇴계동", "강남동"];
 const dongName = (f) => (f.properties?.name ?? "").split(" ").pop();
+// 외곽 읍·면 라벨은 폴리곤 중심이 가까운 곳이 있어, 시안 기준으로만 미세 보정한다.
+// 자물쇠 자체는 행정동 중심에 두고 이름만 옮겨 지도 위치를 왜곡하지 않는다.
+const OUTER_LOCK_LABEL_OFFSETS = {
+  "서면": { x: 14, y: 0 },
+  "남산면": { x: 0, y: -15 },
+  "남신면": { x: 0, y: -15 },
+  "남면": { x: 6, y: 0 },
+  "동면": { x: -6, y: -13 },
+};
+const lockLabelOffset = (feature) => OUTER_LOCK_LABEL_OFFSETS[dongName(feature)] ?? { x: 0, y: 0 };
 export const isDowntown = (f) => DOWNTOWN_DONGS.includes(dongName(f));
 export const isCollectible = (f, zoneMap) => {
   const available = zoneMap?.available ?? [];
@@ -34,14 +44,21 @@ export function useCollection() {
   const [features, setFeatures] = React.useState([]);
   React.useEffect(() => {
     let alive = true;
-    Promise.all([api.getRecords().catch(() => null), api.getDashboardAccessibility().catch(() => null)]).then(
-      ([records, geo]) => {
-        if (!alive) return;
-        if (records?.zone_map) setZoneMap(records.zone_map);
-        if (geo?.features) setFeatures(geo.features);
-      },
-    );
-    return () => { alive = false; };
+    const load = () => {
+      Promise.all([api.getRecords().catch(() => null), api.getDashboardAccessibility().catch(() => null)]).then(
+        ([records, geo]) => {
+          if (!alive) return;
+          if (records?.zone_map) setZoneMap(records.zone_map);
+          if (geo?.features) setFeatures(geo.features);
+        },
+      );
+    };
+    load();
+    window.addEventListener("bomnae-session-changed", load);
+    return () => {
+      alive = false;
+      window.removeEventListener("bomnae-session-changed", load);
+    };
   }, []);
   return { zoneMap, features };
 }
@@ -128,23 +145,36 @@ function stateOf(feature, zoneMap) {
   return isCollectible(feature, zoneMap) ? "open" : "locked";
 }
 
+// 전체 지도는 "아직 탐험할 동네"라는 수집판의 인상을 우선한다.
+// 도심 밖 읍·면은 데이터 수집 여부와 관계없이 기획 시안처럼 빗금·자물쇠로 보여 준다.
+function displayStateOf(feature, zoneMap, forceOuterLocked) {
+  if (forceOuterLocked && !isDowntown(feature)) return "locked";
+  return stateOf(feature, zoneMap);
+}
+
 const PIECE_STYLE = {
   filled: { fill: BLUE, stroke: "#0C74A9", dash: "none", label: "#fff" },
   open: { fill: "#EAF0F3", stroke: "#CBD8DF", dash: "4 3", label: SUB },
   locked: { fill: "url(#collectionHatch)", stroke: "#D3DDE2", dash: "none", label: "#8A96A0" },
 };
 
-function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLabels }) {
+function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLabels, forceOuterLocked = false }) {
   const projector = React.useMemo(() => makeProjector(featureList), [featureList]);
   const labelY = React.useMemo(() => {
     if (!projector) return new Map();
-    return layoutLabels(featureList.map((f) => {
+    const visibleLabelFeatures = featureList.filter((f) => {
+      const st = displayStateOf(f, zoneMap, forceOuterLocked);
+      const hasLockLabel = st === "locked" && showLockIcon && !isDowntown(f);
+      return hasLockLabel || !hideCoreLabels;
+    });
+    return layoutLabels(visibleLabelFeatures.map((f) => {
       const [cx, cy] = projector.centroid(f);
-      const lockLabel = stateOf(f, zoneMap) === "locked" && showLockIcon && !isDowntown(f);
+      const lockLabel = displayStateOf(f, zoneMap, forceOuterLocked) === "locked" && showLockIcon && !isDowntown(f);
+      const offset = lockLabel ? lockLabelOffset(f) : { x: 0, y: 0 };
       // 자물쇠 라벨은 아이콘 아래(+14)에 그려진다 — 충돌 계산도 그 실제 위치로 해야 맞다
-      return { key: f.properties?.zone_code, x: cx, y: lockLabel ? cy + 14 : cy, down: lockLabel, area: projector.area(f), text: dongName(f) };
+      return { key: f.properties?.zone_code, x: cx + offset.x, y: (lockLabel ? cy + 14 : cy) + offset.y, down: lockLabel, area: projector.area(f), text: dongName(f) };
     }));
-  }, [featureList, projector, zoneMap, showLockIcon]);
+  }, [featureList, projector, zoneMap, showLockIcon, hideCoreLabels, forceOuterLocked]);
   if (!projector) {
     return <div style={{ padding: "36px 0", textAlign: "center", font: `500 12px Pretendard,sans-serif`, color: FAINT }}>지도를 준비하고 있어요</div>;
   }
@@ -158,20 +188,22 @@ function PieceSvg({ featureList, zoneMap, onLockedTap, showLockIcon, hideCoreLab
           </pattern>
         </defs>
         {featureList.map((f) => {
-          const s = PIECE_STYLE[stateOf(f, zoneMap)];
+          const st = displayStateOf(f, zoneMap, forceOuterLocked);
+          const s = PIECE_STYLE[st];
           return (
-            <path key={f.properties?.zone_code} d={projector.path(f)} fill={s.fill} stroke={s.stroke} strokeWidth="1.2" strokeDasharray={s.dash} strokeLinejoin="round" strokeLinecap="round" fillRule="evenodd" onClick={stateOf(f, zoneMap) === "locked" ? onLockedTap : undefined} style={stateOf(f, zoneMap) === "locked" ? { cursor: "pointer" } : undefined} />
+            <path key={f.properties?.zone_code} d={projector.path(f)} fill={s.fill} stroke={s.stroke} strokeWidth="1.2" strokeDasharray={s.dash} strokeLinejoin="round" strokeLinecap="round" fillRule="evenodd" onClick={st === "locked" ? onLockedTap : undefined} style={st === "locked" ? { cursor: "pointer" } : undefined} />
           );
         })}
         {featureList.map((f) => {
-          const st = stateOf(f, zoneMap);
+          const st = displayStateOf(f, zoneMap, forceOuterLocked);
           const [cx, cy] = projector.centroid(f);
           if (st === "locked" && showLockIcon && !isDowntown(f)) {
+            const offset = lockLabelOffset(f);
             return (
-              <g key={`lock-${f.properties?.zone_code}`} transform={`translate(${cx},${cy})`} pointerEvents="none">
+              <g key={`lock-${f.properties?.zone_code}`} transform={`translate(${cx + offset.x},${cy + offset.y})`} pointerEvents="none">
                 <rect x="-5" y="-6" width="10" height="8" rx="2" fill={FAINT} />
                 <path d="M-3,-6 v-2 a3,3 0 0 1 6,0 v2" stroke={FAINT} strokeWidth="1.8" fill="none" />
-                <text x="0" y={(labelY.get(f.properties?.zone_code) ?? cy + 14) - cy} textAnchor="middle" style={{ font: "600 9px Pretendard,sans-serif", fill: "#8A96A0" }}>{dongName(f)}</text>
+                <text x="0" y={(labelY.get(f.properties?.zone_code) ?? cy + 14 + offset.y) - (cy + offset.y)} textAnchor="middle" style={{ font: "600 9px Pretendard,sans-serif", fill: "#8A96A0" }}>{dongName(f)}</text>
               </g>
             );
           }
@@ -255,14 +287,14 @@ export function CollectionModal({ onClose }) {
         </div>
 
         <div style={{ font: "700 12px Pretendard,sans-serif", color: "#7A8790", marginTop: 14 }}>
-          춘천시 전체 <span style={{ fontWeight: 500, color: FAINT }}>— 실제 행정동 경계 · 외곽은 준비 중</span>
+          춘천시 전체 <span style={{ fontWeight: 500, color: FAINT }}>— 자물쇠가 표시된 외곽 지역은 준비 중</span>
         </div>
         <div style={{ marginTop: 6 }}>
-          <PieceSvg featureList={features} zoneMap={zoneMap} onLockedTap={lockedTap} showLockIcon hideCoreLabels />
+          <PieceSvg featureList={features} zoneMap={zoneMap} onLockedTap={lockedTap} showLockIcon hideCoreLabels forceOuterLocked />
         </div>
 
         <div style={{ display: "flex", gap: 12, marginTop: 8, justifyContent: "center" }}>
-          {[["모은 조각", { background: BLUE }], ["미획득", { background: "#EAF0F3", border: "1px dashed #CBD8DF", boxSizing: "border-box" }], ["준비 중", { background: "repeating-linear-gradient(45deg,#EDF1F4,#EDF1F4 2px,#D3DDE2 2px,#D3DDE2 3px)" }]].map(([label, style]) => (
+          {[["모은 조각", { background: BLUE }], ["미획득", { background: "#EAF0F3", border: "1px dashed #CBD8DF", boxSizing: "border-box" }], ["자물쇠 지역 · 준비 중", { background: "repeating-linear-gradient(45deg,#EDF1F4,#EDF1F4 2px,#D3DDE2 2px,#D3DDE2 3px)" }]].map(([label, style]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, font: "500 11px Pretendard,sans-serif", color: SUB }}>
               <span style={{ width: 10, height: 10, borderRadius: 3, ...style }} />{label}
             </div>
@@ -286,7 +318,7 @@ export function CollectionModal({ onClose }) {
           </div>
         ) : (
           <div style={{ marginTop: 14, background: "#E7F3FA", borderRadius: 12, padding: "12px 14px", font: "500 12px/1.55 Pretendard,sans-serif", color: "#2A5670" }}>
-            도심 {m || "—"}개 동을 모두 모으면 <b>춘천사랑상품권 5,000원</b>을 신청할 수 있어요. 외곽 읍·면 지역은 준비 중이에요.
+            도심 {m || "—"}개 동부터 조각을 모을 수 있어요. <b>자물쇠가 표시된 외곽 읍·면 지역은 아직 준비 중</b>이에요.
           </div>
         )}
 
