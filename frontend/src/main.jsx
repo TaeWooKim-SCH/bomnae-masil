@@ -300,6 +300,7 @@ function Home() {
     try {
       const data = await api.createSession({ nickname: nickname || undefined, age_confirmed: true });
       localStorage.setItem("session_id", data.session_id);
+      window.dispatchEvent(new Event("bomnae-session-changed"));
       setBalance(data.balance);
       setTitles([]);
       setNickname(nickname);
@@ -937,6 +938,7 @@ function RecordScreen() {
       await api.deleteSession(sessionId);
       localStorage.removeItem("session_id");
       localStorage.removeItem("active_quest_id");
+      window.dispatchEvent(new Event("bomnae-session-changed"));
       navigate("/");
     } catch { setError("잠시 문제가 있었어요. 다시 시도해 주세요"); setDeleteOpen(false); }
   }
@@ -984,9 +986,20 @@ function RecommendHandoff() {
         <p className="recommend-summary">선택한 시간과 출발지에서 가볍게 즐길 수 있는 코스예요.</p>
         {loading ? <RecommendationSkeleton /> : isEmpty ? (
           <section className="recommend-empty">
-            <p className="relaxed-notice">{result.relaxed?.message ?? "지금 조건에 맞는 활동이 없어요"}</p>
-            <p>시간 창을 넓히거나 관심사를 바꿔보세요.</p>
+            <p className="recommend-empty-eyebrow">NO QUEST FOR NOW</p>
+            <h2>{result.relaxed?.message ?? "지금 조건에서는 활동을 찾지 못했어요"}</h2>
+            <p className="recommend-empty-copy">시간이나 관심사 중 한 가지만 조정하면, 오늘 갈 수 있는 새로운 코스를 찾아드릴게요.</p>
+            <div className="recommend-empty-visual" aria-hidden="true">
+              <span>0</span>
+              <svg viewBox="0 0 120 46" fill="none">
+                <path d="M9 35C27 35 27 11 47 11c15 0 14 23 29 23 13 0 15-14 31-14" stroke="currentColor" strokeWidth="1.7" strokeDasharray="3 4" />
+                <circle cx="9" cy="35" r="4" fill="currentColor" />
+                <path d="M108 14c0 5-7 12-7 12s-7-7-7-12a7 7 0 1 1 14 0Z" fill="#0E87C4" />
+                <circle cx="101" cy="14" r="2.3" fill="#F7FAFB" />
+              </svg>
+            </div>
             <button className="primary-button" type="button" onClick={() => navigate("/", { state: { lastRequest: snapshot.request } })}>조건 바꾸기</button>
+            <p className="recommend-empty-footnote">입력한 조건은 그대로 남아 있어요.</p>
           </section>
         ) : (
           <>

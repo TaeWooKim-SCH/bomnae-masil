@@ -23,6 +23,7 @@ import zones from "../mocks/zones.json";
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
 const MOCK_STATE_KEY = "mock_quest_states";
+let mockSessionSequence = 0;
 
 function loadMockStates(): Map<string, { status: string; started_at: string | null }> {
   try {
@@ -83,9 +84,35 @@ function sessionHeaders() {
   return sessionId ? { Authorization: `Bearer ${sessionId}` } : {};
 }
 
+// 목 모드에서도 첫 방문은 새 세션처럼 시작한다. 실제 서비스의 수집 현황은
+// 서버가 session_id 기준으로 돌려주므로 이 분기는 목 모드에만 적용된다.
+function emptyMockRecords() {
+  return {
+    records: [],
+    balance: 0,
+    titles: [],
+    zone_map: { collected: [], available: [] },
+  };
+}
+
+function mockRecordsForCurrentSession() {
+  const sessionId = localStorage.getItem("session_id");
+  // 새로 만든 목 세션은 새로고침 후에도 0조각 상태를 유지한다.
+  if (!sessionId || sessionId.startsWith("ses_mock_")) return emptyMockRecords();
+  // 기존 데모 세션은 발표용 시드(8조각)를 그대로 쓴다.
+  return clone(recordsList);
+}
+
 export const api = {
   health: () => request("/api/health", {}, health),
-  createSession: (body: unknown) => request("/api/sessions", { method: "POST", body: JSON.stringify(body) }, session),
+  createSession: async (body: unknown) => {
+    if (!USE_MOCK) return request("/api/sessions", { method: "POST", body: JSON.stringify(body) }, session);
+    const created = clone(session);
+    mockSessionSequence += 1;
+    created.session_id = `ses_mock_${mockSessionSequence}`;
+    created.balance = 0;
+    return created;
+  },
   deleteSession: async (sessionId: string) => {
     const result = await request(`/api/sessions/${sessionId}`, { method: "DELETE", headers: sessionHeaders() }, null);
     mockQuestStates.clear();
@@ -122,7 +149,9 @@ export const api = {
     const mock = !answered ? recordSaveNoPoints : status === "stamped" || !questDetail.mission ? recordSave : recordSaveUnverified;
     return request("/api/records", { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) }, mock);
   },
-  getRecords: () => request("/api/records", { headers: sessionHeaders() }, recordsList),
+  getRecords: () => USE_MOCK
+    ? Promise.resolve(mockRecordsForCurrentSession())
+    : request("/api/records", { headers: sessionHeaders() }, recordsList),
   getDashboardAccessibility: () => request("/api/dashboard/accessibility", {}, dashboardAccessibility),
   getDashboardInflow: () => request("/api/dashboard/inflow", {}, dashboardInflow),
   getDashboardKpi: () => request("/api/dashboard/kpi", {}, dashboardStats),
