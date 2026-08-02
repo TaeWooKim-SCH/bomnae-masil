@@ -99,6 +99,15 @@ h1, h2, p { margin-top: 0; }
 .recommend-summary { margin: 6px 0 0; color: #5e6b72; font-size: 13px; font-weight: 500; line-height: 1.5; }
 .market-notice, .relaxed-notice { margin: 14px 0 0; padding: 9px 12px; border-radius: 10px; background: #e1f1f9; color: #2a5670; font-size: 11.5px; font-weight: 500; line-height: 1.5; }
 .relaxed-notice { margin-bottom: -4px; border: 1px solid #b5d9ec; background: #e7f3fa; color: #0c74a9; font-weight: 700; }
+.recommend-empty { display: flex; min-height: 420px; flex-direction: column; align-items: center; margin-top: 90px; padding: 12px 8px 42px; text-align: center; }
+.recommend-empty-visual { position: relative; width: 170px; height: 112px; margin-top: 28px; color: #BFDDEB; }
+.recommend-empty-visual > span { position: absolute; top: -12px; left: 50%; color: #E8F2F6; font-size: 112px; font-weight: 800; letter-spacing: -10px; line-height: 1; transform: translateX(-54%); }
+.recommend-empty-visual svg { position: absolute; bottom: 10px; left: 0; width: 100%; color: #8BBFD7; }
+.recommend-empty-eyebrow { margin: 0; color: #0E87C4; font-size: 10.5px; font-weight: 800; letter-spacing: .1em; }
+.recommend-empty h2 { max-width: 290px; margin: 8px 0 0; color: #0B3A52; font-size: 18px; font-weight: 800; letter-spacing: -.5px; line-height: 1.35; }
+.recommend-empty-copy { max-width: 270px; margin: 11px 0 0; color: #71808A; font-size: 12.5px; font-weight: 500; line-height: 1.65; }
+.recommend-empty .primary-button { width: 100%; min-height: 49px; margin-top: 140px; border-radius: 13px; font-size: 14px; box-shadow: 0 5px 13px rgba(14,135,196,.22); }
+.recommend-empty-footnote { margin: 10px 0 0; color: #93A0A8; font-size: 10.5px; font-weight: 500; text-align: center; }
 .recommend-card-list { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
 .quest-recommend-card { overflow: hidden; border: 1px solid #dfe6ea; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(20,40,50,.05); cursor: pointer; transition: border-color .15s, box-shadow .15s; }
 .quest-recommend-card:hover { border-color: #0e87c4; box-shadow: 0 4px 14px rgba(14,135,196,.14); }
