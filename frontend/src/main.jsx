@@ -24,8 +24,20 @@ const BUDGETS = [
   { label: "상관없음", value: null },
 ];
 
-// 화면의 날짜 선택은 없으며, 데모 기준일을 요청에 함께 보냅니다.
-const DEMO_DATE = "2026-08-01";
+// 서비스 날짜의 진실은 **서버의 기준 시각**(GET /health의 demo_now)이다.
+// DEMO_NOW를 켜면 그 날짜, 끄면 서버의 실제 오늘 — 클라이언트 로컬 시계는 쓰지 않는다.
+// (추후 날짜 선택 UI가 붙으면 serviceDate 상태만 사용자가 고른 날짜로 바꾸면 된다.
+//  단 서버 조립기가 "시간 창의 날짜 = 서버의 오늘"을 요구하므로 미래 날짜 지원은 백엔드 선행 필요)
+function localToday() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function serviceDateOf(health) {
+  return typeof health?.demo_now === "string" && health.demo_now.length >= 10
+    ? health.demo_now.slice(0, 10)
+    : localToday();
+}
 const INITIAL_TIME = { start: "14:00", end: "16:00" };
 const ROUND_TRIP_BUS_FARE = 3000;
 
@@ -332,10 +344,11 @@ function Home() {
     if (!isFormComplete || recommending) return;
     setRecommending(true);
     setRecommendError("");
+    const serviceDate = serviceDateOf(health);
     const request = {
       interests,
       origin: { zone_code: zoneCode, stop_id: stopId || null },
-      time_window: { start: `${DEMO_DATE}T${time.start}`, end: `${DEMO_DATE}T${time.end}` },
+      time_window: { start: `${serviceDate}T${time.start}`, end: `${serviceDate}T${time.end}` },
       max_budget_krw: effectiveBudget,
     };
     try {
@@ -713,11 +726,19 @@ function QuestDetail() {
   </main>;
 }
 
+// 서버 기준 날짜 훅 — 화면 어디서든 같은 '오늘'을 쓴다(DEMO_NOW 반영)
+function useServiceDate() {
+  const [health, setHealth] = React.useState(null);
+  React.useEffect(() => { api.health().then(setHealth).catch(() => setHealth(null)); }, []);
+  return serviceDateOf(health);
+}
+
 function VerificationResultModal({ result, merchantName, onRecord, onLater }) {
+  const serviceDate = useServiceDate();
   const isAlready = Boolean(result.already);
   return <div className="verify-completion-backdrop" role="dialog" aria-modal="true" aria-labelledby="verify-completion-title">
     <section className="verify-completion-card">
-      <div className="mission-stamp" aria-hidden="true"><small>봄내마실</small><strong>미션 완료</strong><em>{DEMO_DATE.replaceAll("-", ".")}</em></div>
+      <div className="mission-stamp" aria-hidden="true"><small>봄내마실</small><strong>미션 완료</strong><em>{serviceDate.replaceAll("-", ".")}</em></div>
       <h1 id="verify-completion-title">{isAlready ? "이미 적립된 퀘스트예요" : <>스탬프 획득! <b>+{result.points_added}P</b></>}</h1>
       <p>{isAlready ? "이미 방문 인증이 기록되어 있어요." : `${merchantName ?? "가게"} 방문이 기록됐어요.`}<br />기록까지 남기면 완주 보너스 +20P!</p>
       <button className="primary-button" type="button" onClick={onRecord}>기록 남기기</button>
@@ -838,6 +859,7 @@ function RecordScreen() {
   const goBackWrite = useBackTo(questId ? `/quests/${questId}` : "/");
   const mode = questId ? "write" : "archive"; // 같은 컴포넌트가 두 라우트를 겸하므로 state가 아니라 파생값이어야 한다
   const [collectionOpen, setCollectionOpen] = React.useState(false); // 봄내 조각지도 모달 (#100)
+  const serviceDate = useServiceDate(); // 기록 표시 날짜도 서버 기준
   const [purpose, setPurpose] = React.useState("hobby");
   const [answers, setAnswers] = React.useState(["", "", ""]);
   const [pickedChips, setPickedChips] = React.useState([null, null, null]);
@@ -912,7 +934,7 @@ function RecordScreen() {
     try {
       const response = await api.saveRecord({ quest_id: questId, action: "save", purpose, answers: resolvedAnswers, final: draft });
       localStorage.removeItem("active_quest_id");
-      const completedRecord = { record_id: response.record_id, title: draft.title, tags: draft.tags, created_at: `${DEMO_DATE}T14:00:00`, verified: response.verified, body: draft.body };
+      const completedRecord = { record_id: response.record_id, title: draft.title, tags: draft.tags, created_at: `${serviceDate}T14:00:00`, verified: response.verified, body: draft.body };
       // 저장 = 완주. 주소까지 보관함으로 옮겨 새로고침해도 작성 폼이 재노출되지 않게 한다(계약 §5 저장 후 읽기 전용)
       const goArchive = () => navigate("/records", { replace: true, state: { saved: response, savedRecord: completedRecord } });
       const activity = quest?.coords?.activity;
