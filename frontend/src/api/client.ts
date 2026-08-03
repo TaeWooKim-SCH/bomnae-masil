@@ -1,6 +1,3 @@
-import dashboardStats from "../mocks/dashboard_stats.json";
-import dashboardAccessibility from "../mocks/dashboard_accessibility.json";
-import dashboardInflow from "../mocks/dashboard_inflow.json";
 import health from "../mocks/health.json";
 import questDetail from "../mocks/quest_detail.json";
 import questStart from "../mocks/quest_start.json";
@@ -43,6 +40,11 @@ function rememberMockState(questId: string, state: { status: string; started_at:
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
+}
+
+async function loadMock<T>(loader: () => Promise<{ default: T }>): Promise<T> {
+  const module = await loader();
+  return clone(module.default);
 }
 
 function clearExpiredSession(payload: unknown) {
@@ -152,8 +154,16 @@ export const api = {
   getRecords: () => USE_MOCK
     ? Promise.resolve(mockRecordsForCurrentSession())
     : request("/api/records", { headers: sessionHeaders() }, recordsList),
-  getDashboardAccessibility: () => request("/api/dashboard/accessibility", {}, dashboardAccessibility),
-  getDashboardInflow: () => request("/api/dashboard/inflow", {}, dashboardInflow),
-  getDashboardKpi: () => request("/api/dashboard/kpi", {}, dashboardStats),
+  // 대시보드 GeoJSON은 첫 화면에 필요하지 않으므로 대시보드 진입 시에만 불러온다.
+  // 목/실서버 전환은 기존과 같이 이 파일의 VITE_USE_MOCK 스위치 한 곳에서만 처리한다.
+  getDashboardAccessibility: () => USE_MOCK
+    ? loadMock(() => import("../mocks/dashboard_accessibility.json"))
+    : request("/api/dashboard/accessibility"),
+  getDashboardInflow: () => USE_MOCK
+    ? loadMock(() => import("../mocks/dashboard_inflow.json"))
+    : request("/api/dashboard/inflow"),
+  getDashboardKpi: () => USE_MOCK
+    ? loadMock(() => import("../mocks/dashboard_stats.json"))
+    : request("/api/dashboard/kpi"),
   mockSessionNotFound: () => request("/api/records", {}, sessionNotFound),
 };

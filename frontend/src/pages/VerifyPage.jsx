@@ -1,5 +1,4 @@
 import React from "react";
-import { Html5Qrcode } from "html5-qrcode";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { QrMark } from "../components/common/QrMark";
@@ -13,7 +12,26 @@ export function VerifyPage() {
   const [quest, setQuest] = React.useState(null); const [method, setMethod] = React.useState(location.state?.code ? "code" : "qr"); const [code, setCode] = React.useState(location.state?.code ?? ""); const [amount, setAmount] = React.useState(""); const [receiptName, setReceiptName] = React.useState(""); const [result, setResult] = React.useState(null); const [error, setError] = React.useState(""); const [scanning, setScanning] = React.useState(false);
   function closeResult(next) { setResult(null); if (next) next(); }
   React.useEffect(() => { let mounted = true; api.getQuest(questId).then((data) => { if (!mounted) return; if (!data.mission) { navigate(`/records/${questId}`, { replace: true }); return; } setQuest(data); }).catch((requestError) => { if (mounted) recoverSession(requestError); }); return () => { mounted = false; }; }, [questId]);
-  React.useEffect(() => { if (!scanning) return undefined; const scanner = new Html5Qrcode("verify-qr-reader"); scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 210, height: 210 } }, (text) => { let scannedCode = ""; let merchantId = ""; try { const payload = new URL(text); scannedCode = payload.searchParams.get("c") ?? ""; merchantId = payload.searchParams.get("m") ?? ""; } catch { scannedCode = text.slice(-4); } setCode(scannedCode); setScanning(false); verifyCode(scannedCode, "qr", merchantId); }, () => {}).catch(() => { setScanning(false); setError("카메라를 열 수 없어요. 4자리 코드로 인증해 주세요."); }); return () => { scanner.stop().catch(() => {}); }; }, [scanning]);
+  React.useEffect(() => {
+    if (!scanning) return undefined;
+    let disposed = false;
+    let scanner;
+
+    // 무거운 카메라 라이브러리는 QR 스캔을 누른 순간에만 내려받는다.
+    import("html5-qrcode").then(({ Html5Qrcode }) => {
+      if (disposed) return;
+      scanner = new Html5Qrcode("verify-qr-reader");
+      return scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 210, height: 210 } }, (text) => {
+        let scannedCode = ""; let merchantId = "";
+        try { const payload = new URL(text); scannedCode = payload.searchParams.get("c") ?? ""; merchantId = payload.searchParams.get("m") ?? ""; } catch { scannedCode = text.slice(-4); }
+        setCode(scannedCode); setScanning(false); verifyCode(scannedCode, "qr", merchantId);
+      }, () => {});
+    }).catch(() => {
+      if (!disposed) { setScanning(false); setError("카메라를 열 수 없어요. 4자리 코드로 인증해 주세요."); }
+    });
+
+    return () => { disposed = true; scanner?.stop().catch(() => {}); };
+  }, [scanning]);
   React.useEffect(() => { if (!result) return undefined; const previousOverflow = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = previousOverflow; }; }, [result]);
   async function verifyCode(value, verificationMethod = "code", merchantId = null) { if (value.length !== 4) { setError("QR 코드를 다시 비춰 주세요."); return; } const scenario = quest?.status === "stamped" ? "already" : value === "0000" ? "already" : value !== "2097" ? "fail" : "success"; try { const body = verificationMethod === "qr" ? { method: "qr", merchant_id: merchantId, code: value } : { method: "code", code: value }; const response = await api.verifyQuest(questId, body, scenario); setResult(response); if (!response.already) setQuest((current) => (current ? { ...current, status: "stamped" } : current)); } catch (requestError) { if (recoverSession(requestError)) return; setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); } }
   async function verify() { setError(""); if (method === "qr") { setError("QR 스캔을 먼저 완료해 주세요."); return; } if (method === "receipt" && (!receiptName || !amount || Number(amount) < 1000 || Number(amount) > 200000)) { setError("금액을 확인해 주세요 (1,000~200,000원)"); return; } if (method === "code" && code.length !== 4) { setError("4자리 코드를 입력해 주세요."); return; } if (method === "code") { await verifyCode(code); return; } try { const response = await api.verifyQuest(questId, { method: "receipt", amount_krw: Number(amount) }, quest?.status === "stamped" ? "already" : "success"); setResult(response); if (!response.already) setQuest((current) => (current ? { ...current, status: "stamped" } : current)); } catch (requestError) { if (recoverSession(requestError)) return; setError(requestError?.error?.message ?? "잠시 문제가 있었어요. 다시 시도해 주세요"); } }
